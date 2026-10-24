@@ -6,7 +6,7 @@
   <title>Racket Rush</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Barlow:wght@500;600;700&family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,700;1,800;1,900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,600;0,700;0,800;0,900;1,900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body class="arena">
@@ -25,10 +25,10 @@
         <div class="modes">
           <div class="mode">
             <div class="mode-head">
-              <span class="mode-icon">🤖</span>
+              <span class="mode-icon">🎯</span>
               <div><h3>Solo</h3><p>Rally against an NPC</p></div>
             </div>
-            <div class="seg" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
+            <div class="seg mode-body" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
               <button data-level="0">Easy</button>
               <button data-level="1" class="on">Medium</button>
               <button data-level="2">Hard</button>
@@ -37,13 +37,14 @@
           </div>
           <div class="mode">
             <div class="mode-head">
-              <span class="mode-icon red">👥</span>
-              <div><h3>1v1</h3><p>2 players · 2 laptops</p></div>
+              <span class="mode-icon red">⚔️</span>
+              <div><h3>Versus</h3><p>Take on a friend</p></div>
             </div>
-            <p class="mode-note">Open a room and share the code with a friend.</p>
+            <p class="mode-note mode-body">🔗 Get a code to share</p>
             <button class="big-btn pink" id="btnCreate">Create match</button>
           </div>
         </div>
+        <p class="play-tip">📱 Your phone is your racket. You'll pair it next.</p>
       </div>
       <div class="card feed-card">
         <section class="feed">
@@ -51,7 +52,7 @@
           <ul class="live" id="liveList"><li class="hint">No matches being played</li></ul>
         </section>
         <section class="feed">
-          <h3 class="feed-title">🏆 Hall of fame</h3>
+          <h3 class="feed-title">🏆 Hall of Fame</h3>
           <ol class="hof-list" id="hofList"><li class="hint">No matches yet</li></ol>
         </section>
       </div>
@@ -69,7 +70,7 @@
           <ol>
             <li>Scan the code with your phone camera</li>
             <li>Allow motion &amp; calibrate (20 s)</li>
-            <li>Or skip it and play with the keyboard</li>
+            <li>Swing to ready up</li>
           </ol>
           <div class="status wait" id="phoneStatus"><i></i><span>Waiting for phone…</span></div>
           <div class="url" id="phoneUrl"></div>
@@ -78,7 +79,7 @@
       <div class="card side-card">
         <div class="room-code">Match <b id="matchCode">····</b></div>
         <div class="players" id="lobbyPlayers"></div>
-        <label class="opt"><input type="checkbox" id="optFog" /> <span><b>🌫 Fog of war</b> — now and then, for 1–2 rallies, you only see the shuttle once it crosses the net <i id="optFogNote"></i></span></label>
+        <label class="opt"><input type="checkbox" id="optFog" /> <span><b>🌫️ Fog of war</b> — now and then, for 1–2 rallies, you only see the shuttle once it crosses the net <i id="optFogNote"></i></span></label>
         <label class="opt"><input type="checkbox" id="optScout" /> <span><b>🔍 Scouting report</b> — a live, private report on your opponent's weaknesses (they won't know)</span></label>
         <div class="invite" id="inviteBox">
           <span class="hint">Send this to player 2:</span>

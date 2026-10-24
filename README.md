@@ -91,8 +91,8 @@ npm run dev
 ```
 
 Open <http://localhost:5180>. To try 1v1 on one machine, open a second browser tab: each tab is its
-own identity. Keyboard: Space clear/drive · X smash · C lift · Z drop · ←/→ aim · 1/2/3 secret moves ·
-Q/W/E read · S scouting report · P pause. (`npm run dev:hmr` turns on Vite live reload for development. It is off
+own identity. Every player swings with a paired phone (there is no keyboard play). Laptop shortcuts:
+1/2/3 secret moves · Q/W/E read · S scouting report · P pause. (`npm run dev:hmr` turns on Vite live reload for development. It is off
 by default because a dropped live-reload socket through a tunnel reloads the page mid-match.)
 
 ### Phones and a second laptop

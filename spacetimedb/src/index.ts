@@ -443,7 +443,7 @@ function blankMatch(ctx: Ctx, mode: string, level: number): MatchRow {
     scoreA: 0, scoreB: 0, server: 0, target: POINTS_TO_WIN,
     laptopA: '', laptopB: '', nameA: '', nameB: '', phoneA: '', phoneB: '',
     readyA: false, readyB: false, pointNo: 0, rally: 0, longestRally: 0, shotSeq: 0,
-    winner: NONE, startsAt: 0n, createdAt: ctx.timestamp, gameNo: 0, fogEnabled: mode === 'pvp', fogLeft: 0,
+    winner: NONE, startsAt: 0n, createdAt: ctx.timestamp, gameNo: 0, fogEnabled: true, fogLeft: 0,
   };
 }
 
@@ -711,8 +711,8 @@ function startPlay(ctx: Ctx, m: MatchRow) {
   for (const r of [...ctx.db.targetZone.matchId.filter(m.id)]) ctx.db.targetZone.id.delete(r.id);
   const lo = [...ctx.db.loadout.matchId.filter(m.id)];
   for (const seat of [0, 1]) {
-    // No lobby choice yet: 1v1 matches start with scouting on.
-    const scouted = lo.find(l => l.seat === seat)?.scout ?? m.mode === 'pvp';
+    // No lobby choice yet: scouting starts on.
+    const scouted = lo.find(l => l.seat === seat)?.scout ?? true;
     ctx.db.secret.insert({ id: 0, matchId: m.id, seat, armed: '', usedPower: false, usedCurve: false, usedFeint: false, scouted });
     ctx.db.stamina.insert({ id: 0, matchId: m.id, seat, value: 100 });
     ctx.db.readPick.insert({ id: 0, matchId: m.id, seat, guess: '', seq: 0, buff: false });
@@ -814,6 +814,7 @@ export const leaveMatch = spacetimedb.reducer(ctx => {
 export const setReady = spacetimedb.reducer({ ready: t.bool() }, (ctx, { ready }) => {
   const { m, seat } = myLaptopSeat(ctx);
   if (m.status !== 'lobby') return;
+  if (ready && !seatPhone(m, seat)) throw new SenderError('Pair your phone first: it is the racket');
   if (ready && calibratingSeat(ctx, m) === seat) throw new SenderError('Finish calibrating your phone first');
   const next = seat === 0 ? { ...m, readyA: ready } : { ...m, readyB: ready };
   if (next.readyA && next.readyB && next.laptopB && calibratingSeat(ctx, next) < 0) {

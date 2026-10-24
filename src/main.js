@@ -79,7 +79,6 @@ const game = {
   replay: null,
 };
 const phone = { connected: false, ready: false, tapMode: false, aim: 0, pitch: 0 };
-let keyAim = 0;
 
 // Local frame: seat 1 is mirrored so the player is always at the bottom of the screen.
 const flip = () => net.seat === 1;
@@ -320,7 +319,7 @@ function renderHallOfFame() {
   const rows = [...net.conn.db.hallOfFame.iter()]
     .sort((a, b) => (a.at.microsSinceUnixEpoch < b.at.microsSinceUnixEpoch ? 1 : -1)).slice(0, 6);
   $('hofList').innerHTML = rows.length
-    ? rows.map(r => `<li><span class="who"><b>${esc(r.winner)}</b> <em>beat</em> ${esc(r.loser)}${r.fastestSmashKmh ? `<i>💥 ${Math.round(r.fastestSmashKmh)} km/h smash</i>` : ''}</span><b class="score">${esc(r.score)}</b></li>`).join('')
+    ? rows.map(r => `<li><span class="who"><span class="line"><b>${esc(r.winner)}</b> <em>beat</em> ${esc(r.loser)}</span>${r.fastestSmashKmh ? `<i>⚡ ${Math.round(r.fastestSmashKmh)} km/h smash</i>` : ''}</span><b class="score">${esc(r.score)}</b></li>`).join('')
     : '<li class="hint">No matches yet</li>';
 }
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -401,17 +400,17 @@ function showLobby(m) {
   $('inviteBox').classList.toggle('hidden', ai || !!m.laptopB);
   $('inviteUrl').textContent = `${publicBase()}/?join=${m.code}`;
   const myReady = net.seat === 0 ? m.readyA : m.readyB;
-  // A phone that's still calibrating holds the match back (the server refuses to start it too).
-  const calibrating = phone.connected && !phone.ready;
-  $('btnReady').disabled = calibrating && !myReady;
-  $('btnReady').textContent = calibrating && !myReady ? '📱 Finish calibrating your phone…'
+  // The phone is the racket: no paired, calibrated phone, no match (the server refuses it too).
+  const noPhone = !phone.ready && !myReady;
+  $('btnReady').disabled = noPhone;
+  $('btnReady').textContent = noPhone ? (phone.connected ? 'Calibrating phone…' : 'Pair your phone first')
     : ai ? '▶ Start match' : myReady ? '✖ Not ready' : m.laptopB ? '✋ Ready' : '✋ Ready (waiting for player 2)';
   $('btnReady').classList.toggle('hidden', net.spectator);
   $('optFog').checked = m.fogEnabled;
   $('optFog').disabled = net.spectator || net.seat !== 0;
   $('optFogNote').textContent = net.seat !== 0 ? '(host decides)' : '';
   const lo = first(net.conn.db.myLoadout.iter());
-  $('optScout').checked = lo ? lo.scout : m.mode === 'pvp';
+  $('optScout').checked = lo ? lo.scout : true;
   $('optScout').disabled = net.spectator;
   renderQR(m.code, net.seat);
 }
@@ -435,11 +434,11 @@ function renderQR(code, seat) {
 function setPhoneStatus() {
   const s = $('phoneStatus');
   s.classList.remove('wait', 'good');
-  const [cls, text] = !phone.connected ? ['wait', 'Waiting for phone… (optional)']
+  const [cls, text] = !phone.connected ? ['wait', 'Waiting for phone…']
     : !phone.ready ? ['wait', 'Phone connected — calibrating…']
     : ['good', phone.tapMode ? 'Phone ready (tap mode)' : 'Phone ready — swing to ready up!'];
   s.classList.add(cls); s.querySelector('span').textContent = text;
-  hud.setInput(net.spectator ? '👀 Spectating' : phone.ready ? (phone.tapMode ? '📱 Phone (tap)' : '📱 Phone racket') : phone.connected ? '📱 Calibrating…' : '⌨️ Keyboard',
+  hud.setInput(net.spectator ? '👀 Spectating' : phone.ready ? (phone.tapMode ? '📱 Phone (tap)' : '📱 Phone racket') : phone.connected ? '📱 Calibrating…' : '📱 No phone',
     phone.ready ? 'good' : phone.connected ? 'wait' : null);
 }
 
@@ -558,7 +557,7 @@ function onPhoneSwing(e) {
   if (game.state === 'playing') playerSwing(e.power, e.aim, (e.lag || 0) / 1000 + LINK_LATENCY, { dir: e.dir, slice: e.slice });
 }
 
-// Player swing from phone or keyboard. `lag` = seconds between the real swing and now.
+// Player swing from the phone. `lag` = seconds between the real swing and now.
 function playerSwing(power, aim, lag = 0, gesture = {}) {
   if (net.spectator || game.state !== 'playing' || !M) return;
   const me = actors.you;
@@ -713,7 +712,7 @@ function handleEvents(events) {
   }
 }
 
-// ---------- menu, lobby and keyboard ----------
+// ---------- menu, lobby and shortcuts ----------
 function storedName() {
   try { return localStorage.getItem('racket.name') || ''; } catch { return ''; }
 }
@@ -793,15 +792,12 @@ function toggleSecret(move) {
   act('pickSecret', { move: sec && sec.armed === move ? '' : move });
 }
 
-const held = new Set();
+// Laptop shortcuts for the on-screen buttons. Swinging and aiming only come from the phone.
 window.addEventListener('keydown', e => {
   if (e.target instanceof HTMLInputElement) return;
   const k = e.key.toLowerCase();
   if (k === 'p' || k === 'escape') { if (game.state === 'playing' || game.state === 'paused') act('setPaused', { paused: game.state === 'playing' }); return; }
   if (e.repeat) return;
-  held.add(e.key);
-  keyAim = (held.has('ArrowRight') ? 1 : 0) - (held.has('ArrowLeft') ? 1 : 0);
-  if (game.state === 'lobby' && (k === 'enter' || k === ' ')) { e.preventDefault(); $('btnReady').click(); return; }
   if (game.state !== 'playing') return;
   if (k === '1') toggleSecret('power');
   if (k === '2') toggleSecret('curve');
@@ -810,14 +806,6 @@ window.addEventListener('keydown', e => {
   if (k === 'w') pickRead('clear');
   if (k === 'e') pickRead('smash');
   if (k === 's') toggleScout();
-  if (k === ' ') { e.preventDefault(); playerSwing(e.shiftKey ? 1 : 0.55, keyAim); }
-  if (k === 'z') playerSwing(0.5, keyAim, 0, { slice: true });
-  if (k === 'x') playerSwing(1, keyAim, 0, { dir: 'down' });
-  if (k === 'c') playerSwing(0.7, keyAim, 0, { dir: 'up' });
-});
-window.addEventListener('keyup', e => {
-  held.delete(e.key);
-  keyAim = (held.has('ArrowRight') ? 1 : 0) - (held.has('ArrowLeft') ? 1 : 0);
 });
 function initAudioSafe() { try { initAudio(); } catch { /* audio unavailable */ } }
 
@@ -852,7 +840,7 @@ function update(dt) {
   } else fx.setTiming(null, null);
 
   // Aim marker on the opponent's court
-  const aim = phone.ready ? phone.aim : keyAim;
+  const aim = phone.ready ? phone.aim : 0;
   fx.setAim(aim * 2.2, !net.spectator && game.phase !== 'point');
 }
 
