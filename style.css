@@ -423,11 +423,19 @@ body.arena .end-btns .small-btn.primary { background: linear-gradient(180deg, #f
 .video-panel.min { width: auto; }
 .video-panel.min .vtile, .video-panel.min .vlive { display: none; }
 /* Keep menus and overlays clear of the panel while a call is up. */
-body.with-video .screen { padding-right: calc(var(--video-w) + 40px); }
+body.with-video .screen:not(#lobby) { padding-right: calc(var(--video-w) + 40px); }
+/* Docked in the lobby: a third card in the row, as tall as its neighbours. */
+.video-panel.docked {
+  position: static; transform: none; align-self: stretch; width: var(--video-w);
+  padding: 12px; border-radius: 28px; gap: 10px;
+}
+.video-panel.docked .vtile { flex: 1 1 0; min-height: 96px; aspect-ratio: auto; }
+.video-panel.docked.min { width: auto; }
 body.with-video #callout, body.with-video #subcallout { right: calc(var(--video-w) + 44px); }
 @media (max-width: 760px) {
   .video-panel { width: 132px; top: auto; bottom: 150px; transform: none; }
   body.with-video .screen { padding-right: 16px; }
+  .video-panel.docked { width: min(300px, 94vw); }
   body.with-video #callout, body.with-video #subcallout { right: 22px; bottom: 360px; }
 }
 
