@@ -2,7 +2,7 @@
   "name": "racket-rush",
   "version": "0.2.0",
   "private": true,
-  "description": "Badminton on your laptop, swung with your phone \u2014 1v1 or vs CPU, refereed by SpacetimeDB.",
+  "description": "Badminton on your laptop, swung with your phone \u2014 1v1 or vs NPC, refereed by SpacetimeDB.",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
