@@ -6,10 +6,10 @@
   <title>Racket Rush</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Barlow:wght@500;600;700&family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,700;1,800;1,900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
 </head>
-<body>
+<body class="arena">
   <canvas id="game"></canvas>
 
   <!-- Title: choose how to play -->
@@ -160,6 +160,27 @@
     <button class="small-btn" id="btnReplayClose">✕ Close</button>
   </div>
   <div id="replayShot" class="replay-shot"></div>
+
+  <!-- 1v1 video call: both players' cameras, peer to peer (SpacetimeDB only carries the signaling) -->
+  <aside id="videoPanel" class="video-panel hidden" aria-label="Video call">
+    <div class="vtile opp" id="vTileOpp">
+      <video id="vidOpp" autoplay playsinline></video>
+      <div class="vph"><b id="vInitOpp">?</b><span id="vNoteOpp">Calling…</span></div>
+      <span class="vname"><i class="vmic"></i><em id="vNameOpp">Opponent</em></span>
+      <button class="vunmute hidden" id="btnVidUnmute">🔈 Click for sound</button>
+    </div>
+    <div class="vtile me" id="vTileMe">
+      <video id="vidMe" autoplay playsinline muted></video>
+      <div class="vph"><b id="vInitMe">Y</b><span id="vNoteMe">Starting camera…</span></div>
+      <span class="vname"><i class="vmic"></i><em id="vNameMe">You</em></span>
+    </div>
+    <div class="vctl">
+      <button id="btnMic" title="Mute microphone" aria-label="Microphone"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg></button>
+      <button id="btnCam" title="Turn camera off" aria-label="Camera"><svg viewBox="0 0 24 24"><path d="M15 8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-2.2l4.4 2.9A1 1 0 0 0 21 15.9V8.1a1 1 0 0 0-1.6-.8L15 10.2V8Z"/></svg></button>
+      <span class="vlive"><i></i>LIVE</span>
+      <button id="btnVidMin" title="Minimize video" aria-label="Minimize video">–</button>
+    </div>
+  </aside>
   <div id="toast"></div>
 
   <script type="module" src="/src/main.js"></script>
