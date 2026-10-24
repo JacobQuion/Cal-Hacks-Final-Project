@@ -731,13 +731,22 @@ function handleEvents(events) {
 function storedName() {
   try { return localStorage.getItem('racket.name') || ''; } catch { return ''; }
 }
-// Default names: a planet plus a feeling (16 chars max). Old defaults ("Player 123", the
-// previous SpacetimeDB-flavoured names) are swapped for one too.
-const PLANETS = ['Mercury', 'Venus', 'Earth', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'];
-const FEELINGS = ['Lover', 'Hater', 'Fan', 'Skeptic', 'Stan', 'Doubter', 'Enjoyer', 'Critic'];
-const pick = a => a[Math.floor(Math.random() * a.length)];
-const funName = () => `${pick(PLANETS)} ${pick(FEELINGS)}`;
-const OLD_DEFAULTS = /^(Player \d+|Reducer Rex|Wormhole Wes|Event Horizon|Time Lord|Primary Key|Table Flipper|Sir Subscribe|Captain Commit|Row Rider|Big Bang Betty|Warp Reducer|Null Pointer|Light Year Lou|Schema Shaman|Dr\. Paradox|Quantum Smash|Black Hole Bo|Maincloud Max|Index Ace|Lag Free Larry|Tick Rate Tim|Spacetime Sam)$/;
+// Default names, Cal Hacks flavoured (16 chars max). Old defaults ("Player 123", the earlier
+// SpacetimeDB and planet names) are swapped for one too.
+const FUN_NAMES = [
+  'DDOSki', 'Oski Overflow', 'Sudo Oski', 'Oskinator', 'Sleepless Oski', 'Golden Bear Bug', 'Go Bears Gus',
+  'Bearly Awake', 'Bear Metal', 'Brain Rot Bear', 'Cal Bear Clutch', 'Big Game Bo', 'Blue & Gold',
+  'Gold Rush Gus', 'Campanile Clear', 'Sather Smasher', 'Doe Library Dan', 'Moffitt Mole', 'Telegraph Tom',
+  'Memorial Glade', 'Red Bull Ranger', 'Caffeine Cal', 'Energy Drinker', 'Nap Pod Ned', 'Pizza at 2AM',
+  '3AM Debugger', 'Sleep Is A Bug', 'Merge Conflict', 'Git Push Force', 'Last Min Commit', 'Works On My PC',
+  'Localhost Larry', 'Segfault Sally', 'Stack Overflow', 'Npm Installer', 'API Key Leaker', 'Ctrl+C Ctrl+V',
+  'Hot Fix Hank', 'Prod Pusher', 'Ship It Shirley', 'Rubber Duck', 'Vibe Coder', 'Prompt Wizard',
+  'Pivot Pete', 'YC Reject', 'Hackathon Hero', 'Demo Day Dan', 'Pitch Deck Pat', 'Judge Bait',
+  'Devpost Dave', 'Mentor Mike', 'Discord Lurker', 'Free Swag Sam', 'Swag Goblin', 'Sticker Hoarder',
+  'Sponsor Booth', 'Wifi Warrior', 'Hackerbear',
+];
+const funName = () => FUN_NAMES[Math.floor(Math.random() * FUN_NAMES.length)];
+const OLD_DEFAULTS = /^(Player \d+|(Mercury|Venus|Earth|Mars|Jupiter|Saturn|Uranus|Neptune|Pluto) (Lover|Hater|Fan|Skeptic|Stan|Doubter|Enjoyer|Critic)|Reducer Rex|Wormhole Wes|Event Horizon|Time Lord|Primary Key|Table Flipper|Sir Subscribe|Captain Commit|Row Rider|Big Bang Betty|Warp Reducer|Null Pointer|Light Year Lou|Schema Shaman|Dr\. Paradox|Quantum Smash|Black Hole Bo|Maincloud Max|Index Ace|Lag Free Larry|Tick Rate Tim|Spacetime Sam)$/;
 const saved = storedName();
 $('nameInput').value = saved && !OLD_DEFAULTS.test(saved) ? saved : funName();
 const nameNow = () => $('nameInput').value.trim() || 'Player';
