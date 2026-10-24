@@ -210,6 +210,8 @@ const video = createVideoCall({
 });
 function syncVideo() {
   const pvp = M && M.mode === 'pvp' && !net.spectator && game.state !== 'menu';
+  // In the lobby the call takes centre stage; once the match starts it docks to the side.
+  document.body.classList.toggle('video-stage', !!pvp && game.state === 'lobby');
   if (!pvp) { video.sync(null); return; }
   const opp = net.seat === 0 ? M.laptopB : M.laptopA;
   video.sync({ matchId: M.id, seat: net.seat, oppKey: opp || '', oppName: opp ? oppName(M) : '', myName: myName(M) || nameNow() });
@@ -397,8 +399,8 @@ function showLobby(m) {
   const ai = m.mode === 'ai';
   const row = (name, ready, isMe) => `<div class="pl ${ready ? 'ready' : ''}"><span>${esc(name || 'Waiting for player 2…')}${isMe ? ' (you)' : ''}</span><b>${name ? (ready ? '✔ Ready' : '…') : ''}</b></div>`;
   $('lobbyPlayers').innerHTML = row(m.nameA, m.readyA, !net.spectator && net.seat === 0) + row(m.nameB, m.readyB, !net.spectator && net.seat === 1);
-  $('inviteBox').classList.toggle('hidden', ai || !!m.laptopB);
-  $('inviteUrl').textContent = `${publicBase()}/?join=${m.code}`;
+  $('btnCopy').classList.toggle('hidden', ai || !!m.laptopB);
+  $('btnCopy').dataset.url = `${publicBase()}/?join=${m.code}`;
   const myReady = net.seat === 0 ? m.readyA : m.readyB;
   // The phone is the racket: no paired, calibrated phone, no match (the server refuses it too).
   const noPhone = !phone.ready && !myReady;
@@ -428,7 +430,7 @@ function renderQR(code, seat) {
     .catch(() => { $('qr').textContent = 'QR failed'; });
   // Motion sensors only work over HTTPS, so a plain-http QR can't drive a phone racket.
   const insecure = new URL(url).protocol !== 'https:';
-  $('phoneUrl').textContent = insecure ? `⚠️ ${url} — phones need HTTPS: start the tunnel and open this page from its https:// address` : url;
+  $('phoneUrl').textContent = insecure ? '⚠️ Phones need HTTPS: open this page from its https:// address' : '';
 }
 
 function setPhoneStatus() {
@@ -752,7 +754,7 @@ $('btnReady').addEventListener('click', () => {
 $('optFog').addEventListener('change', () => act('setFog', { on: $('optFog').checked }));
 $('optScout').addEventListener('change', () => act('setScout', { on: $('optScout').checked }));
 $('btnCopy').addEventListener('click', () => {
-  navigator.clipboard?.writeText($('inviteUrl').textContent).then(() => say('Invite link copied'), () => say('Copy failed — select the link'));
+  navigator.clipboard?.writeText($('btnCopy').dataset.url).then(() => say('Invite link copied'), () => say(`Copy failed. Share code ${M?.code || ''}`));
 });
 $('btnLeaveLobby').addEventListener('click', () => { sfx.ui(); if (net.spectator) { net.watchCode = ''; toMenu(); } else act('leaveMatch'); });
 $('btnResume').addEventListener('click', () => { sfx.ui(); act('setPaused', { paused: false }); });
