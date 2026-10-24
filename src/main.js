@@ -6,6 +6,7 @@ import { FX } from './fx.js';
 import { hud } from './hud.js';
 import { initAudio, sfx } from './audio.js';
 import { connect, call, tables } from './stdb.js';
+import { createVideoCall } from './video.js';
 
 // The laptop is a window onto the match: SpacetimeDB decides shots, landings, scoring and the NPC.
 // This page renders the flight locally from each `shot` row, judges your swing timing against that
@@ -134,7 +135,7 @@ connect({
   subs: [
     tables.match, tables.shotFeed, tables.myShot, tables.myLoadout, tables.device, tables.hallOfFame, tables.queue,
     tables.myDevice, tables.mySecret, tables.myStamina, tables.condition, tables.matchStats, tables.matchLog,
-    tables.myRead, tables.myTarget, tables.scoutingReport,
+    tables.myRead, tables.myTarget, tables.scoutingReport, tables.myRtc,
     tables.swingEvent, tables.aimEvent, tables.hitEvent, tables.rallyEvent, tables.readEvent, tables.noticeEvent,
   ],
   wire(conn) {
@@ -152,6 +153,7 @@ connect({
     conn.db.rallyEvent.onInsert((_c, e) => onRallyEvent(e));
     conn.db.readEvent.onInsert((_c, e) => onReadEvent(e));
     conn.db.noticeEvent.onInsert((_c, e) => { if (e.matchId === net.matchId) say(e.text); });
+    conn.db.myRtc.onInsert((_c, row) => video.receive(row));
   },
   onReady(conn, me) {
     net.conn = conn; net.me = me;
@@ -165,6 +167,18 @@ connect({
   },
   onStatus(text) { $('connStatus').textContent = text || '● Connected to SpacetimeDB'; if (text && game.state === 'playing') say(text); },
 });
+
+// Face-to-face video for 1v1s: signaling goes through SpacetimeDB, the media itself is peer to peer.
+const video = createVideoCall({
+  send: data => call(net.conn, 'rtcSignal', { data }, e => console.warn('video signal:', e)),
+  ack: upTo => call(net.conn, 'rtcAck', { upTo }, () => {}),
+});
+function syncVideo() {
+  const pvp = M && M.mode === 'pvp' && !net.spectator;
+  if (!pvp) { video.sync(null); return; }
+  const opp = net.seat === 0 ? M.laptopB : M.laptopA;
+  video.sync({ matchId: M.id, seat: net.seat, oppKey: opp || '', oppName: opp ? oppName(M) : '', myName: myName(M) || nameNow() });
+}
 
 const mine = e => !net.spectator && e.matchId === net.matchId && e.seat === net.seat;
 
@@ -205,6 +219,7 @@ function refresh() {
   $('btnQuick').textContent = queued ? '✖ Cancel search' : '⚡ Quick match';
 
   applyMatch(M);
+  syncVideo();
 }
 
 // ---------- hidden information: reads, target zone, scouting (all from per-player views) ----------
@@ -297,6 +312,8 @@ function applyMatch(m) {
   hud.setLevel(level);
   hud.setNames(net.spectator ? m.nameA : 'You', net.spectator ? m.nameB : oppName(m));
   hud.setScore(mySeatScore(m), oppSeatScore(m), m.server === net.seat ? 'you' : 'cpu');
+  world.setScoreboard({ left: net.spectator ? m.nameA || 'Player 1' : myName(m) || 'You', right: net.spectator ? m.nameB || 'Player 2' : oppName(m),
+    a: mySeatScore(m), b: oppSeatScore(m), serving: m.server === net.seat ? 0 : 1 });
   game.level = m.level;
   $('fogChip').classList.toggle('hidden', !(m.fogLeft > 0));
   $('fogChip').textContent = `🌫 FOG · ${m.fogLeft} ${m.fogLeft === 1 ? 'rally' : 'rallies'}`;
@@ -570,6 +587,7 @@ function toMenu() {
   $('endBar').classList.add('hidden');
   $('scoutPanel').classList.add('hidden');
   fx.setZone(null);
+  world.setScoreboard(null);
   hud.show(false); showScreen('menu');
   shuttle.active = false; fx.setTiming(null, null); fx.setLanding(null);
 }
