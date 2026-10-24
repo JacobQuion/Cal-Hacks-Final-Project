@@ -210,7 +210,7 @@ const video = createVideoCall({
   sendFrame: data => net.conn?.reducers.rtcSendFrame({ data }),
 });
 function syncVideo() {
-  const pvp = M && M.mode === 'pvp' && !net.spectator;
+  const pvp = M && M.mode === 'pvp' && !net.spectator && game.state !== 'menu';
   if (!pvp) { video.sync(null); return; }
   const opp = net.seat === 0 ? M.laptopB : M.laptopA;
   video.sync({ matchId: M.id, seat: net.seat, oppKey: opp || '', oppName: opp ? oppName(M) : '', myName: myName(M) || nameNow() });
@@ -250,9 +250,6 @@ function refresh() {
   renderScout();
   renderLive();
   renderHallOfFame();
-  const queued = [...conn.db.queue.iter()].some(q => q.identity.toHexString() === net.me);
-  $('queueHint').textContent = queued ? '⏳ Looking for an opponent…' : '';
-  $('btnQuick').textContent = queued ? '✖ Cancel search' : '⚡ Quick match';
 
   applyMatch(M);
   syncVideo();
@@ -650,6 +647,7 @@ function toMenu() {
   fx.setZone(null);
   world.setScoreboard(null);
   hud.show(false); showScreen('menu');
+  syncVideo();
   shuttle.active = false; fx.setTiming(null, null); fx.setLanding(null);
 }
 
@@ -747,18 +745,6 @@ window.addEventListener('pointerdown', initAudioSafe, { once: true });
 window.addEventListener('keydown', initAudioSafe, { once: true });
 $('btnAI').addEventListener('click', () => { initAudioSafe(); sfx.ui(); act('createMatch', { mode: 'ai', level: game.level, name: nameNow() }); });
 $('btnCreate').addEventListener('click', () => { initAudioSafe(); sfx.ui(); act('createMatch', { mode: 'pvp', level: 1, name: nameNow() }); });
-$('btnJoin').addEventListener('click', () => {
-  initAudioSafe(); sfx.ui();
-  const code = $('joinInput').value.trim().toUpperCase();
-  if (code.length !== 4) { say('Enter the 4-letter match code'); return; }
-  act('joinMatch', { code, name: nameNow() });
-});
-$('joinInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnJoin').click(); });
-$('btnQuick').addEventListener('click', () => {
-  initAudioSafe(); sfx.ui();
-  const queued = net.conn && [...net.conn.db.queue.iter()].some(q => q.identity.toHexString() === net.me);
-  if (queued) act('leaveQueue'); else act('quickMatch', { name: nameNow() });
-});
 $('btnReady').addEventListener('click', () => {
   initAudioSafe(); sfx.ui();
   if (!M) return;
