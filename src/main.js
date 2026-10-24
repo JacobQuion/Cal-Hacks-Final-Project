@@ -7,7 +7,7 @@ import { hud } from './hud.js';
 import { initAudio, sfx } from './audio.js';
 import { connect, call, tables } from './stdb.js';
 
-// The laptop is a window onto the match: SpacetimeDB decides shots, landings, scoring and the CPU.
+// The laptop is a window onto the match: SpacetimeDB decides shots, landings, scoring and the NPC.
 // This page renders the flight locally from each `shot` row, judges your swing timing against that
 // flight, and sends the swing to the `swing` reducer. Everything is drawn in a local frame where
 // you are always on the near (+Z) side; seat 1 sees the world mirrored.
@@ -653,6 +653,19 @@ for (const b of document.querySelectorAll('#levelSeg button')) {
     game.level = +b.dataset.level;
   });
 }
+// Soft tick when a home-screen button is hovered or tabbed to (audio unlocks on the first click/key).
+let hoverBtn = null;
+const onMenuSelect = e => {
+  const b = e.target.closest('#menu button');
+  if (b === hoverBtn) return;
+  hoverBtn = b;
+  if (b && !b.disabled) sfx.hover();
+};
+$('menu').addEventListener('pointerover', onMenuSelect);
+$('menu').addEventListener('focusin', onMenuSelect);
+$('menu').addEventListener('pointerleave', () => { hoverBtn = null; });
+window.addEventListener('pointerdown', initAudioSafe, { once: true });
+window.addEventListener('keydown', initAudioSafe, { once: true });
 $('btnAI').addEventListener('click', () => { initAudioSafe(); sfx.ui(); act('createMatch', { mode: 'ai', level: game.level, name: nameNow() }); });
 $('btnCreate').addEventListener('click', () => { initAudioSafe(); sfx.ui(); act('createMatch', { mode: 'pvp', level: 1, name: nameNow() }); });
 $('btnJoin').addEventListener('click', () => {
