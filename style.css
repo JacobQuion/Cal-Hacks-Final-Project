@@ -491,12 +491,12 @@ body.arena .hint-keys { color: rgba(238, 242, 255, .7); -webkit-text-stroke: 0; 
 body.arena .logo { transform: skewX(-8deg); }
 body.arena .logo span { font-family: "Barlow Condensed", sans-serif; font-style: italic; font-weight: 900; -webkit-text-stroke: 0; letter-spacing: 4px; }
 body.arena .logo-top {
-  background: linear-gradient(180deg, #ffffff 30%, #9fb0d8 70%, #e9eefc); -webkit-background-clip: text; background-clip: text; color: transparent;
-  text-shadow: none; filter: drop-shadow(0 6px 18px rgba(0, 0, 0, .6));
+  color: #ffffff; -webkit-text-stroke: 3px #0b1024;
+  text-shadow: 0 4px 0 #0b1024, 0 8px 24px rgba(0, 0, 0, .85);
 }
 body.arena .logo-bottom {
-  background: linear-gradient(180deg, #fff3b0 10%, #ffc61a 45%, #e08a00 80%); -webkit-background-clip: text; background-clip: text; color: transparent;
-  text-shadow: none; filter: drop-shadow(0 8px 26px rgba(255, 170, 0, .35)) drop-shadow(0 4px 10px rgba(0, 0, 0, .6));
+  color: #ffc61a; -webkit-text-stroke: 4px #0b1024;
+  text-shadow: 0 5px 0 #0b1024, 0 10px 30px rgba(0, 0, 0, .85), 0 0 40px rgba(255, 170, 0, .35);
 }
 body.arena #menu { background: radial-gradient(ellipse at center, rgba(5, 6, 13, .1) 20%, rgba(5, 6, 13, .75) 100%); }
 body.arena #pause, body.arena #results { background: rgba(5, 8, 18, .55); backdrop-filter: blur(8px); }
