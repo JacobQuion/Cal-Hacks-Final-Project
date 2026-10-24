@@ -718,7 +718,16 @@ function handleEvents(events) {
 function storedName() {
   try { return localStorage.getItem('racket.name') || ''; } catch { return ''; }
 }
-$('nameInput').value = storedName() || `Player ${Math.floor(Math.random() * 900 + 100)}`;
+// Default names, SpacetimeDB flavoured (16 chars max). Old "Player 123" defaults get one too.
+const FUN_NAMES = [
+  'Reducer Rex', 'Wormhole Wes', 'Event Horizon', 'Time Lord', 'Primary Key', 'Table Flipper',
+  'Sir Subscribe', 'Captain Commit', 'Row Rider', 'Big Bang Betty', 'Warp Reducer', 'Null Pointer',
+  'Light Year Lou', 'Schema Shaman', 'Dr. Paradox', 'Quantum Smash', 'Black Hole Bo', 'Maincloud Max',
+  'Index Ace', 'Lag Free Larry', 'Tick Rate Tim', 'Spacetime Sam',
+];
+const funName = () => FUN_NAMES[Math.floor(Math.random() * FUN_NAMES.length)];
+const saved = storedName();
+$('nameInput').value = saved && !/^Player \d+$/.test(saved) ? saved : funName();
 const nameNow = () => $('nameInput').value.trim() || 'Player';
 $('nameInput').addEventListener('change', () => {
   try { localStorage.setItem('racket.name', nameNow()); } catch { /* storage unavailable */ }
