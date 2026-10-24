@@ -921,7 +921,7 @@ export const serve = spacetimedb.reducer({ power: t.f32(), aim: t.f32() }, (ctx,
 });
 
 /** Most network delay we accept between the server's clock and a laptop's own judgement (shot out + swing back). */
-const MAX_LINK_S = 0.8;
+const MAX_LINK_S = 0.6;
 
 /**
  * The receiving laptop swings at shot `seq` and reports how far off its timing was (dtMs) against its own

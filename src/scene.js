@@ -617,8 +617,7 @@ function makeRacket(frameColor) {
   bed.position.y = cy; r.add(bed);
   const tip = new THREE.Object3D(); tip.position.y = cy + H * 0.4; r.add(tip);
   const neck = new THREE.Object3D(); neck.position.y = 0.44; r.add(neck);
-  const face = new THREE.Object3D(); face.position.y = cy; r.add(face);   // string-bed centre: where the shuttle is struck
-  r.userData = { tip, neck, face };
+  r.userData = { tip, neck };
   r.scale.setScalar(1.12);
   return r;
 }
