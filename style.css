@@ -580,6 +580,11 @@ body.arena #menu .logo-shuttle { font-size: 40px; right: -34px; top: -10px; }
 .mode-body { min-height: 46px; }
 body.arena .mode .seg { background: var(--surface); }
 body.arena .mode .seg button.on { background: var(--ink); color: #fff; box-shadow: none; }
+/* Each NPC level gets its own colour when picked. */
+body.arena #levelSeg button { transition: background .15s, color .15s; }
+body.arena #levelSeg button.on[data-level="0"] { background: var(--green); color: #fff; box-shadow: 0 3px 0 #15803d; }
+body.arena #levelSeg button.on[data-level="1"] { background: var(--yellow); color: var(--ink); box-shadow: 0 3px 0 var(--yellow-deep); }
+body.arena #levelSeg button.on[data-level="2"] { background: var(--red); color: #fff; box-shadow: 0 3px 0 var(--red-deep); }
 .mode-note {
   display: flex; align-items: center; justify-content: center; border-radius: 14px; background: var(--surface);
   font-size: 15px; font-weight: 800; color: var(--sub);
