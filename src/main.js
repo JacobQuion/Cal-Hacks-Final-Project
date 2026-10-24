@@ -325,7 +325,18 @@ function renderHallOfFame() {
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 // ---------- match state → screens ----------
-function showScreen(id) { for (const s of ['menu', 'lobby', 'pause', 'results']) $(s).classList.toggle('show', s === id); }
+function showScreen(id) {
+  for (const s of ['menu', 'lobby', 'pause', 'results']) $(s).classList.toggle('show', s === id);
+  dockVideo(id === 'lobby');
+}
+// In the lobby the call sits in the card row as a third card; everywhere else it floats on the right.
+function dockVideo(dock) {
+  const panel = $('videoPanel'), home = dock ? $('lobby').querySelector('.menu-row') : document.body;
+  if (panel.parentNode === home) return;
+  home.appendChild(panel);
+  panel.classList.toggle('docked', dock);
+  for (const v of panel.querySelectorAll('video')) if (v.srcObject) v.play().catch(() => {});
+}
 
 function applyMatch(m) {
   if (game.state === 'replay') return;
@@ -720,16 +731,15 @@ function handleEvents(events) {
 function storedName() {
   try { return localStorage.getItem('racket.name') || ''; } catch { return ''; }
 }
-// Default names, SpacetimeDB flavoured (16 chars max). Old "Player 123" defaults get one too.
-const FUN_NAMES = [
-  'Reducer Rex', 'Wormhole Wes', 'Event Horizon', 'Time Lord', 'Primary Key', 'Table Flipper',
-  'Sir Subscribe', 'Captain Commit', 'Row Rider', 'Big Bang Betty', 'Warp Reducer', 'Null Pointer',
-  'Light Year Lou', 'Schema Shaman', 'Dr. Paradox', 'Quantum Smash', 'Black Hole Bo', 'Maincloud Max',
-  'Index Ace', 'Lag Free Larry', 'Tick Rate Tim', 'Spacetime Sam',
-];
-const funName = () => FUN_NAMES[Math.floor(Math.random() * FUN_NAMES.length)];
+// Default names: a planet plus a feeling (16 chars max). Old defaults ("Player 123", the
+// previous SpacetimeDB-flavoured names) are swapped for one too.
+const PLANETS = ['Mercury', 'Venus', 'Earth', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'];
+const FEELINGS = ['Lover', 'Hater', 'Fan', 'Skeptic', 'Stan', 'Doubter', 'Enjoyer', 'Critic'];
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const funName = () => `${pick(PLANETS)} ${pick(FEELINGS)}`;
+const OLD_DEFAULTS = /^(Player \d+|Reducer Rex|Wormhole Wes|Event Horizon|Time Lord|Primary Key|Table Flipper|Sir Subscribe|Captain Commit|Row Rider|Big Bang Betty|Warp Reducer|Null Pointer|Light Year Lou|Schema Shaman|Dr\. Paradox|Quantum Smash|Black Hole Bo|Maincloud Max|Index Ace|Lag Free Larry|Tick Rate Tim|Spacetime Sam)$/;
 const saved = storedName();
-$('nameInput').value = saved && !/^Player \d+$/.test(saved) ? saved : funName();
+$('nameInput').value = saved && !OLD_DEFAULTS.test(saved) ? saved : funName();
 const nameNow = () => $('nameInput').value.trim() || 'Player';
 $('nameInput').addEventListener('change', () => {
   try { localStorage.setItem('racket.name', nameNow()); } catch { /* storage unavailable */ }
