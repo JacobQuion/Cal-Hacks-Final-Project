@@ -5,7 +5,7 @@ import { Shuttle, predictContact, serveSpots, gradeTiming, TIME_SCALE, HALF_L, W
 import { FX } from './fx.js';
 import { hud } from './hud.js';
 import { initAudio, sfx } from './audio.js';
-import { connect, call, tables } from './stdb.js';
+import { connect, call, tables, link } from './stdb.js';
 import { createVideoCall } from './video.js';
 
 // The laptop is a window onto the match: SpacetimeDB decides shots, landings, scoring and the NPC.
@@ -18,7 +18,6 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const other = w => (w === 'you' ? 'cpu' : 'you');
 const first = it => { for (const x of it) return x; return undefined; };
 const STEP = 1 / 240;
-const LINK_LATENCY = 0.03;        // typical phone → laptop delay (s)
 const REACH = 2.4;                // how far (m) the player may still be from the contact point (lunge)
 const params = new URLSearchParams(location.search);
 
@@ -68,64 +67,171 @@ const oppName = m => (net.seat === 0 ? m.nameB : m.nameA) || 'Opponent';
 const seatName = (m, seat) => (seat === 0 ? m?.nameA : m?.nameB) || 'Player';
 
 // ---------- actors ----------
+// Actor frame = the athlete group's own axes: +X racket side, −Z facing the net. `you` (side +1) faces −Z,
+// the far player (side −1) is turned around, so a world vector maps to the actor frame by flipping X and Z.
+// Footwork: accelerate and brake instead of sliding at a constant speed, and sprint (or lunge) harder when
+// the contact is coming soon. `ref` is a plain 6.5 m/s runner that the reach rule is judged by, so how
+// far you can get to is the same however the drawn player moves.
+const RUN = { max: 7, lunge: 12, accel: 40, dash: 75, ref: 6.5 };
 function makeActor(mesh, side) {
   return {
     mesh, side,
-    pos: mesh.group.position, target: mesh.group.position.clone(),
-    speed: 6.5, swing: null, moving: 0, step: 0, whiffUntil: 0,
+    pos: mesh.group.position, target: mesh.group.position.clone(), vel: new THREE.Vector3(), ref: mesh.group.position.clone(),
+    swing: null, plan: null, clock: 0, moving: 0, step: 0, whiffUntil: 0, whiffPower: 0, arm: null,
   };
 }
 const actors = { you: makeActor(world.player, 1), cpu: makeActor(world.cpu, -1) };
-const hitOffset = a => new THREE.Vector3(a.side * 0.55, 0, -a.side * 0.3); // racket-side, slightly in front
+const toActor = (a, v) => v.set(a.side * v.x, v.y, a.side * v.z);   // also actor → world (it's its own inverse)
 
-function moveTo(a, contactPos) {
-  const off = hitOffset(a);
-  a.target.set(clamp(contactPos.x - off.x, -3.6, 3.6), 0, a.side * clamp(a.side * (contactPos.z - off.z), 0.7, HALF_L + 1.2));
+function place(a, p) { a.pos.set(p.x, 0, p.z); a.target.copy(a.pos); a.ref.copy(a.pos); a.vel.set(0, 0, 0); a.plan = null; }
+// The server stands where an underarm swing meets the shuttle held out at `hold` (near the usual spot).
+function placeServer(a, spot, hold) {
+  place(a, spot);
+  const plan = planSwing(a, hold), r = toActor(a, plan.reach.clone());
+  place(a, { x: hold.x - r.x, z: hold.z - r.z });
+  a.plan = Object.assign(plan, { serve: true });   // racket held back, ready to serve
 }
-function goHome(a) { a.target.set(0, 0, a.side * 3.7); }
+// Run to where this actor's racket will meet the shuttle at `contactPos`, `inS` seconds from now.
+function moveTo(a, contactPos, inS = Infinity) {
+  const p = a.plan = planSwing(a, contactPos);
+  p.t = a.clock + inS;
+  const r = toActor(a, p.reach.clone());
+  a.target.set(clamp(contactPos.x - r.x, -3.6, 3.6), 0, a.side * clamp(a.side * (contactPos.z - r.z), 0.7, HALF_L + 1.2));
+}
+function goHome(a) { a.target.set(0, 0, a.side * 3.7); a.plan = null; }
 
 // ---------- swing animation ----------
-const REST = new THREE.Euler(0.4, 0, -0.35);
-const SWINGS = {
-  over: { from: [1.4, 0, -0.3], to: [-1.5, 0, -0.2] },
-  mid:  { from: [0, 1.3, -1.4], to: [0, -1.4, -1.4] },
-  low:  { from: [2.4, 0, -0.3], to: [5.0, 0, -0.2] },
+// A swing is planned around its contact point. At contact the arm points the racket face at the shuttle;
+// the backswing and follow-through are arcs either side of that pose (over the top, side-arm or underarm).
+// The player is positioned so the contact pose meets the shuttle, loads into the backswing as it arrives,
+// and the strike passes through contact a few frames after the swing.
+const REST = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.4, 0, -0.35));
+const ARCS = {   // arc axis (actor frame), backswing / follow-through angles from contact (rad), arm heading at contact (x, z)
+  over: { axis: new THREE.Vector3(1, 0, 0), back: 1.5, follow: -1.7, dir: [0.3, -1] },
+  mid:  { axis: new THREE.Vector3(0, 1, 0), back: -1.7, follow: 1.6, dir: [1, -0.3] },
+  low:  { axis: new THREE.Vector3(1, 0, 0), back: -1.5, follow: 1.7, dir: [0.45, -1] },
 };
-function startSwing(a, kind) { a.swing = { t: 0, kind }; }
+const PREP_S = 0.42;     // the arm starts loading this long before contact
+const STRIKE_S = 0.05;   // backswing → contact
+const FOLLOW_S = 0.17;   // contact → end of the follow-through
+const swingKind = y => (y > 1.9 ? 'over' : y > 1.0 ? 'mid' : 'low');
+
+const RIG = { L: 0, face: new THREE.Vector3() };   // shoulder → racket face: length (m), direction in the shoulder frame
+function measureRig() {
+  const m = world.player;
+  m.group.updateMatrixWorld(true);
+  const s = m.shoulder.getWorldPosition(new THREE.Vector3()), f = m.racket.userData.face.getWorldPosition(new THREE.Vector3());
+  RIG.L = s.distanceTo(f);
+  RIG.face.copy(m.shoulder.worldToLocal(f)).normalize();
+}
+const _va = new THREE.Vector3(), _qa = new THREE.Quaternion(), _qg = new THREE.Quaternion(), _qt = new THREE.Quaternion(), _qp = new THREE.Quaternion();
+const _qr = new THREE.Quaternion(), _er = new THREE.Euler();
+
+// `aimAt`: point the arm straight at `at` from where the player is now (a strike, which may come before the
+// player has fully arrived) rather than along the swing's usual heading (planning where to stand).
+function planSwing(a, at, aimAt = false) {
+  if (!RIG.L) measureRig();
+  const kind = swingKind(at.y), arc = ARCS[kind];
+  a.mesh.group.updateMatrixWorld(true);
+  const sh = toActor(a, a.mesh.shoulder.getWorldPosition(new THREE.Vector3()).sub(a.pos));   // shoulder pivot above the feet
+  const s = clamp((at.y - sh.y) / RIG.L, -0.95, 0.98), h = Math.sqrt(1 - s * s), n = Math.hypot(arc.dir[0], arc.dir[1]);
+  const d = new THREE.Vector3(arc.dir[0] / n * h, s, arc.dir[1] / n * h);
+  if (aimAt) {
+    const to = toActor(a, _va.set(at.x - a.pos.x, at.y, at.z - a.pos.z)).sub(sh);
+    if (to.length() > 0.3) d.copy(to.normalize());
+  }
+  return {
+    kind, t: Infinity,
+    base: new THREE.Quaternion().setFromUnitVectors(RIG.face, d),   // shoulder orientation at contact (actor frame)
+    reach: sh.addScaledVector(d, RIG.L),                             // feet → racket face at contact (actor frame)
+  };
+}
+// Arm orientation (actor frame) at the point `theta` along the plan's arc.
+function arcPose(plan, theta, out) { return out.setFromAxisAngle(ARCS[plan.kind].axis, theta).multiply(plan.base); }
+// The torso's orientation in the actor frame (it leans and twists with the swing).
+function torsoRel(a, out) {
+  a.mesh.shoulder.parent.getWorldQuaternion(out);
+  a.mesh.group.getWorldQuaternion(_qp);
+  return out.premultiply(_qp.invert());
+}
+// The arm is tracked in the actor frame (a.arm), so the torso's lean and twist don't drag the racket off
+// line; this turns it into the shoulder's own rotation. Run again once the rig has posed the torso.
+function seatArm(a) {
+  a.mesh.group.updateMatrixWorld(true);
+  a.mesh.shoulder.quaternion.copy(torsoRel(a, _qt).invert().multiply(a.arm));
+}
+// Strike through `at`. `fromContact` = the hit already happened (an opponent's shot arriving), so the arm
+// is at contact at once and only the follow-through plays.
+function startSwing(a, at, fromContact = false) {
+  a.swing = { t: fromContact ? STRIKE_S : 0, plan: planSwing(a, at, true), from: a.arm.clone() };
+  a.plan = null;
+}
 function animateActor(a, dt, t) {
-  // Movement
-  const d = new THREE.Vector3().subVectors(a.target, a.pos); d.y = 0;
-  const dist = d.length();
-  const stepLen = Math.min(dist, a.speed * dt);
-  if (dist > 0.01) a.pos.addScaledVector(d.normalize(), stepLen);
-  a.moving += ((dist > 0.05 ? 1 : 0) - a.moving) * Math.min(1, dt * 10);
-  a.step += dt * 14 * a.moving;
+  a.clock += dt;
+  // Footwork: steer toward the target, braking so the player stops on the spot
+  _va.subVectors(a.target, a.ref).setY(0);
+  const refDist = _va.length();
+  if (refDist > 0.01) a.ref.addScaledVector(_va, Math.min(refDist, RUN.ref * dt) / refDist);
+  _va.subVectors(a.target, a.pos).setY(0);
+  const dist = _va.length();
+  let vmax = RUN.max, accel = RUN.accel;
+  if (a.plan && a.plan.t < Infinity) {
+    const left = a.plan.t - a.clock - 0.08;
+    vmax = left > 0 ? clamp(1.35 * dist / left, RUN.max, RUN.lunge) : RUN.lunge;
+    if (left < 0.35) accel = RUN.dash;   // a fast shot: explode toward it
+  }
+  if (dist > 0.005) _va.multiplyScalar(Math.min(vmax, Math.sqrt(1.4 * accel * dist)) / dist); else _va.set(0, 0, 0);
+  _va.sub(a.vel);
+  const dv = _va.length(), maxDv = accel * dt;
+  if (dv > maxDv) _va.multiplyScalar(maxDv / dv);
+  a.vel.add(_va);
+  a.pos.addScaledVector(a.vel, dt);
+  if (dist < 0.01 && a.vel.lengthSq() < 0.04) { a.pos.set(a.target.x, 0, a.target.z); a.vel.set(0, 0, 0); }
+  const speed = a.vel.length();
+  a.moving += (clamp(speed / 2.5, 0, 1) - a.moving) * Math.min(1, dt * 10);
+  a.step += dt * (6 + speed * 1.25) * a.moving;
   a.mesh.legs[0].rotation.x = Math.sin(a.step) * 0.6 * a.moving;
   a.mesh.legs[1].rotation.x = -Math.sin(a.step) * 0.6 * a.moving;
   a.mesh.body.position.y = Math.abs(Math.sin(a.step)) * 0.05 * a.moving + Math.sin(t * 3) * 0.008;
 
   // Racket arm
-  const sh = a.mesh.shoulder;
+  a.mesh.group.updateMatrixWorld(true);
+  a.arm ??= torsoRel(a, new THREE.Quaternion()).multiply(REST);
   let rest = REST;
-  if (a === actors.you && phone.ready && !phone.tapMode) rest = new THREE.Euler(clamp(0.4 + phone.pitch / 90, -0.4, 1.4), 0, -0.35);
-  if (a.swing) {
-    a.swing.t += dt / 0.3;
-    const S = SWINGS[a.swing.kind];
-    if (a.swing.t < 1) {
-      const e = Math.pow(a.swing.t, 0.6);
-      sh.rotation.set(S.from[0] + (S.to[0] - S.from[0]) * e, S.from[1] + (S.to[1] - S.from[1]) * e, S.from[2] + (S.to[2] - S.from[2]) * e);
-    } else if (a.swing.t > 1.6) a.swing = null;
+  if (a === actors.you && phone.ready && !phone.tapMode) rest = _qr.setFromEuler(_er.set(clamp(0.4 + phone.pitch / 90, -0.4, 1.4), 0, -0.35));
+  rest = torsoRel(a, _qg).multiply(rest);   // the ready pose is relative to the torso
+  const sw = a.swing;
+  if (sw) {
+    if (sw.drawn) sw.t += dt;   // the first frame shows the starting pose (contact, for a hit already made)
+    sw.drawn = true;
+    if (sw.t < STRIKE_S) {
+      const u = sw.t / STRIKE_S;
+      a.arm.slerpQuaternions(sw.from, arcPose(sw.plan, 0, _qa), u * u);   // accelerate into the shuttle
+    } else if (sw.t < STRIKE_S + FOLLOW_S) {
+      const u = (sw.t - STRIKE_S) / FOLLOW_S;
+      arcPose(sw.plan, ARCS[sw.plan.kind].follow * (1 - (1 - u) * (1 - u)), a.arm);
+    } else if (sw.t > STRIKE_S + FOLLOW_S + 0.12) a.swing = null;   // hold the finish a moment
+  } else {
+    // Ready position, loading into the backswing as the shuttle arrives
+    let goal = rest;
+    const p = a.plan;
+    if (p && (p.serve || (a.clock > p.t - PREP_S && a.clock < p.t + 0.3))) {
+      const u = p.serve ? 0.7 : clamp((a.clock - (p.t - PREP_S)) / (PREP_S * 0.75), 0, 1);
+      goal = rest.slerp(arcPose(p, ARCS[p.kind].back, _qa), u * u * (3 - 2 * u));
+    }
+    a.arm.slerp(goal, Math.min(1, dt * 12));
   }
-  if (!a.swing || a.swing.t >= 1) {
-    const k = Math.min(1, dt * 10);
-    sh.rotation.x += (rest.x - sh.rotation.x) * k; sh.rotation.y += (rest.y - sh.rotation.y) * k; sh.rotation.z += (rest.z - sh.rotation.z) * k;
-  }
+  seatArm(a);
 }
-const swingKind = y => (y > 1.9 ? 'over' : y > 1.0 ? 'mid' : 'low');
 
 // ---------- SpacetimeDB ----------
 const say = msg => hud.toast(msg, 2600);
 const act = (name, args = {}) => call(net.conn, name, args, say);
+// Keep a fresh measure of this laptop's hop to SpacetimeDB during a match (phone swings are back-dated by
+// it). phone_aim does nothing when a laptop calls it, so it serves as a cheap ping.
+setInterval(() => {
+  if (net.conn && !net.spectator && ['lobby', 'countdown', 'playing'].includes(game.state)) act('phoneAim', { aim: 0, pitch: 0 });
+}, 2000);
 
 let refreshQueued = false;
 const queueRefresh = () => { if (!refreshQueued) { refreshQueued = true; queueMicrotask(() => { refreshQueued = false; refresh(); }); } };
@@ -398,9 +504,9 @@ function startCountdown() {
   showScreen(null); hud.show(true);
   const sp = serveSpots(0, 0);
   const sv = net.seat === 0 ? actors.you : actors.cpu, rv = net.seat === 0 ? actors.cpu : actors.you;
-  sv.pos.copy(toLocal(sp.server)); sv.target.copy(sv.pos);
-  rv.pos.copy(toLocal(sp.receiver)); rv.target.copy(rv.pos);
-  shuttle.hold(toLocal(sp.hold));
+  placeServer(sv, toLocal(sp.server), toLocal(sp.hold));
+  place(rv, toLocal(sp.receiver));
+  holdShuttle(toLocal(sp.hold), false);
   let n = 3;
   const tick = () => {
     if (game.state !== 'countdown') return;
@@ -422,9 +528,10 @@ function setupServe(m) {
   const sv = m.server, sc = sv === 0 ? m.scoreA : m.scoreB;
   const spots = serveSpots(sv, sc);
   const svA = sv === net.seat ? actors.you : actors.cpu, rvA = sv === net.seat ? actors.cpu : actors.you;
-  svA.pos.copy(toLocal(spots.server)); svA.target.copy(svA.pos);
-  rvA.pos.copy(toLocal(spots.receiver)); rvA.target.copy(rvA.pos);
-  shuttle.hold(toLocal(spots.hold));
+  placeServer(svA, toLocal(spots.server), toLocal(spots.hold));
+  place(rvA, toLocal(spots.receiver));
+  game.hitHold = null;
+  holdShuttle(toLocal(spots.hold), false);
   fx.resetTrail(); fx.setTiming(null, null); fx.setLanding(null);
   renderReads();
   if (!net.spectator && sv === net.seat) {
@@ -441,8 +548,10 @@ function onShot(row) {
   const who = row.hitter === net.seat ? 'you' : 'cpu';
   // Out of the fog: the shuttle appears at the net — the swing that sent it was never seen.
   if (row.fromNet) { fx.puff({ x: p.x, z: p.z }, 0x8a5cff); sfx.net(); }
-  else if (who === 'cpu' || net.spectator) startSwing(actors[who], game.phase === 'serve' ? 'low' : swingKind(p.y));
-  shuttle.launch(p, v);
+  else if (who === 'cpu' || net.spectator) startSwing(actors[who], p, true);
+  else if (actors.you.swing && actors.you.swing.t < STRIKE_S) Object.assign(actors.you.swing, { t: STRIKE_S, drawn: false });   // return came back before the racket got there
+  game.hitHold = null;
+  launchShuttle(p, v, !row.fromNet);
   fx.resetTrail(); fx.setTrailColor(row.smash ? 0xff2bd6 : 0xc6ff00);
   game.lastHitter = who;
   game.phase = 'rally';
@@ -460,7 +569,7 @@ function onLaunched(seq) {
     who: recv, seq, contactPos: pred.contact.pos, contactT: game.gameT + pred.contact.t,
     land: pred.land, landIn: pred.landIn, hit: false,
   };
-  moveTo(ra, pred.contact.pos);
+  moveTo(ra, pred.contact.pos, pred.contact.t / TIME_SCALE);
   const showLanding = recv === 'you' && !net.spectator && M?.mode === 'ai' && game.level < 2;
   fx.setLanding(showLanding ? pred.land : null, pred.landIn);
 }
@@ -468,7 +577,7 @@ function onLaunched(seq) {
 function onHitEvent(e) {
   if (e.matchId !== net.matchId || game.state !== 'playing') return;
   const smash = e.smash;
-  fx.burst(shuttle.pos, smash ? 1 : 0.5, smash ? 26 : 12);
+  fx.burst(world.shuttle.position, smash ? 1 : 0.5, smash ? 26 : 12);
   if (smash) fx.shake(e.seat === net.seat ? 1 : 0.6);
   if (e.seat === net.seat && !net.spectator) {
     hud.sub(e.shown, smash ? '#ff4f8b' : '#ffffff');
@@ -482,6 +591,7 @@ function onHitEvent(e) {
 function onRallyEvent(e) {
   if (e.matchId !== net.matchId) return;
   game.incoming = null; fx.setTiming(null, null); fx.setLanding(null);
+  releaseHold();
   if (net.spectator) {
     hud.callout(`${seatName(M, e.winner)}!`, '#ffd23f'); sfx.point();
   } else if (e.winner === net.seat) {
@@ -503,7 +613,8 @@ function onPhoneSwing(e) {
   phone.aim = e.aim;
   if (game.state === 'lobby' && M && !(net.seat === 0 ? M.readyA : M.readyB)) { act('setReady', { ready: true }); return; }
   if (game.state === 'results') { act('rematch'); return; }
-  if (game.state === 'playing') playerSwing(e.power, e.aim, (e.lag || 0) / 1000 + LINK_LATENCY, { dir: e.dir, slice: e.slice });
+  // e.lag already includes the phone's own hop to SpacetimeDB; add this laptop's hop back from it.
+  if (game.state === 'playing') playerSwing(e.power, e.aim, Math.min(0.45, (e.lag || 0) / 1000 + link.oneWay()), { dir: e.dir, slice: e.slice });
 }
 
 // Player swing from phone or keyboard. `lag` = seconds between the real swing and now.
@@ -511,34 +622,49 @@ function playerSwing(power, aim, lag = 0, gesture = {}) {
   if (net.spectator || game.state !== 'playing' || !M) return;
   const me = actors.you;
   const inc = game.incoming;
-  startSwing(me, inc && inc.who === 'you' ? swingKind(inc.contactPos.y) : M.phase === 'serve' ? 'low' : 'over');
+  const serving = M.phase === 'serve' && M.server === net.seat;
+  startSwing(me, inc && inc.who === 'you' ? inc.contactPos
+    : serving ? shuttle.pos : new THREE.Vector3(0.45, 2.1, -0.4).add(me.pos));
   sfx.swoosh();
 
   if (M.phase === 'serve') {
     if (M.server === net.seat) { act('serve', { power: gesture.slice ? 0.2 : power, aim: aimWorld(aim) }); sfx.hit(0.3, false); }
     return;
   }
-  if (M.phase !== 'rally' || !inc || inc.who !== 'you' || inc.hit || elapsed < me.whiffUntil) return;
+  if (M.phase !== 'rally' || !inc || inc.who !== 'you' || inc.hit) return;
+  if (elapsed < me.whiffUntil && power <= me.whiffPower + 0.25) return;   // a clearly harder swing still counts
 
   const swingT = game.gameT - lag * TIME_SCALE;
   const dt = (swingT - inc.contactT) / TIME_SCALE;
   const grade = gradeTiming(dt);
-  const inPlay = shuttle.active && !shuttle.landed && shuttle.pos.y > 0.08;
-  const near = me.pos.distanceTo(me.target) < REACH;
+  const inPlay = (shuttle.active && !shuttle.landed && shuttle.pos.y > 0.08) || (!!inc.pending && !!game.hitHold);   // held at the racket for a waiting swing
+  const near = me.ref.distanceTo(me.target) < REACH;
   if (!grade || !near || !inPlay) {
-    me.whiffUntil = elapsed + 0.25;
+    me.whiffUntil = elapsed + 0.25; me.whiffPower = power;
     const msg = !near && grade ? 'CAN\'T REACH!' : dt < 0 ? 'TOO EARLY' : 'TOO LATE';
     if (!near && grade) inc.hit = true;
     hud.sub(msg, '#ffffff');
     if (dt > 0) inc.hit = true; // late whiff — that was the chance
     return;
   }
-  inc.hit = true;
+  const hit = { grade, power, gesture, args: { seq: inc.seq, power, aim: aimWorld(aim), dir: gesture.dir || 'flat', slice: !!gesture.slice, dtMs: Math.round(dt * 1000) } };
+  // A soft swing well before the contact is often just the backswing of the real one (raising the phone
+  // before a chop). Hold it until the contact moment; a harder swing meanwhile replaces it.
+  if (grade === 'EARLY' && power < 0.5 && !inc.pending) { inc.pending = hit; return; }
+  commitHit(inc, hit);
+}
+
+function commitHit(inc, { grade, power, gesture, args }) {
+  inc.hit = true; inc.pending = null;
+  // The server launches the return from the contact point; hold the shuttle there until it does, rather
+  // than letting it fall past the racket for a network round trip and then snap back.
+  game.hitHold = { seq: inc.seq, until: elapsed + 0.9, pos: inc.contactPos, vel: shuttle.vel.clone() };
+  holdShuttle(inc.contactPos);
   fx.setTiming(null, null); fx.setLanding(null);
   const colors = { 'PERFECT!': '#3bd16f', GOOD: '#3ec7ff', EARLY: '#ffd23f', LATE: '#ffd23f' };
   hud.callout(grade, colors[grade]);
   sfx.hit(power, gesture.dir === 'down' && power >= 0.8);
-  act('swing', { seq: inc.seq, power, aim: aimWorld(aim), dir: gesture.dir || 'flat', slice: !!gesture.slice, dtMs: Math.round(dt * 1000) });
+  act('swing', args);
 }
 
 // Match just ended: freeze on the court (last landing still visible) until the player opens results.
@@ -629,9 +755,12 @@ function updateReplay(dt) {
     const s = rp.shots[rp.i++];
     const p = toLocal({ x: s.px, y: s.py, z: s.pz }), v = toLocal({ x: s.vx, y: s.vy, z: s.vz });
     const who = s.seat === net.seat ? 'you' : 'cpu';
-    actors[who].target.set(clamp(p.x - hitOffset(actors[who]).x, -3.6, 3.6), 0, p.z);
-    startSwing(actors[who], swingKind(p.y));
-    shuttle.launch(p, v); fx.resetTrail(); fx.setTrailColor(s.name === 'SMASH!' ? 0xff2bd6 : 0xc6ff00);
+    startSwing(actors[who], p, true);
+    goHome(actors[who]);
+    // The receiver heads for the next contact (actor clocks run at replay speed, like rp.t).
+    const nx = rp.shots[rp.i];
+    if (nx) moveTo(actors[nx.seat === net.seat ? 'you' : 'cpu'], toLocal({ x: nx.px, y: nx.py, z: nx.pz }), rp.offsets[rp.i] - rp.t);
+    launchShuttle(p, v, rp.i > 1); fx.resetTrail(); fx.setTrailColor(s.name === 'SMASH!' ? 0xff2bd6 : 0xc6ff00);
     const shotEl = $('replayShot');
     shotEl.textContent = `${seatName(M, s.seat)}: ${s.name}${s.special ? ` · secret ${s.special.toUpperCase()}` : ''} · ${Math.round(s.speedKmh)} km/h${s.grade ? ` · ${s.grade}` : ''}`;
     shotEl.style.color = s.name === 'SMASH!' ? '#ff4f8b' : '#ffffff';
@@ -780,6 +909,25 @@ let acc = 0, elapsed = 0, perfT = 0, perfN = 0, renderScale = Math.min(window.de
 const camPos = new THREE.Vector3(0, 6, 14), camLook = new THREE.Vector3(0, 1, 0), lookCur = camLook.clone();
 const camTarget = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _dir = new THREE.Vector3();
 
+// ---------- shuttle hand-offs ----------
+// A new flight rarely starts exactly where the shuttle is drawn (timing error, network delay). The drawn
+// shuttle keeps an offset that eases to zero, so it glides onto the new flight instead of jumping.
+const shuttleOff = new THREE.Vector3();
+const _qs = new THREE.Quaternion(), _landTilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2.4, 0, 0));
+const BLEND_S = 0.06;
+function easeFrom(p, blend) {
+  shuttleOff.subVectors(world.shuttle.position, p);
+  if (!blend || !world.shuttle.visible || shuttleOff.length() > 4) shuttleOff.set(0, 0, 0);
+}
+function launchShuttle(p, v, blend = true) { easeFrom(p, blend); shuttle.launch(p, v); }
+function holdShuttle(p, blend = true) { easeFrom(p, blend); shuttle.hold(p); }
+// The return never came (the server judged it a miss): let the shuttle fall on from the contact point.
+function releaseHold() {
+  const h = game.hitHold;
+  game.hitHold = null;
+  if (h && !shuttle.active) shuttle.launch(h.pos, h.vel);
+}
+
 function update(dt) {
   // Fixed-step physics in game time (rendering only; the server referees)
   acc += dt;
@@ -795,13 +943,22 @@ function update(dt) {
     const sc = M.server === 0 ? M.scoreA : M.scoreB;
     shuttle.hold(toLocal(serveSpots(M.server, sc).hold));
   }
+  if (game.hitHold && elapsed > game.hitHold.until) releaseHold();
 
   // Timing ring for the player
   const inc = game.incoming;
   if (!net.spectator && game.phase === 'rally' && inc && inc.who === 'you' && !inc.hit) {
     const left = (inc.contactT - game.gameT) / TIME_SCALE;
     fx.setTiming(inc.contactPos, left);
-    if (left < -WINDOWS.ok) { inc.hit = true; fx.setTiming(null, null); }
+    if (inc.pending) {
+      // An early soft swing is waiting: the shuttle stops at the racket at the contact moment, and the swing
+      // stands once a harder one (sensor + network delay behind the real swing) can no longer be on its way.
+      if (left <= 0 && !game.hitHold) {
+        game.hitHold = { seq: inc.seq, until: elapsed + 1.2, pos: inc.contactPos, vel: shuttle.vel.clone() };
+        holdShuttle(inc.contactPos);
+      }
+      if (left <= -Math.min(0.3, 0.1 + 2 * link.oneWay())) commitHit(inc, inc.pending);
+    } else if (left < -WINDOWS.ok) { inc.hit = true; fx.setTiming(null, null); }
   } else fx.setTiming(null, null);
 
   // Aim marker on the opponent's court
@@ -816,17 +973,19 @@ function frame() {
   if (game.state === 'playing') update(dt);
   if (game.state === 'replay') updateReplay(dt);
 
-  for (const a of Object.values(actors)) animateActor(a, game.state === 'paused' ? 0 : dt, elapsed);
+  const actorDt = game.state === 'paused' ? 0 : game.state === 'replay' ? dt * replaySpeed : dt;
+  for (const a of Object.values(actors)) animateActor(a, actorDt, elapsed);
 
-  // Shuttle mesh: cork leads along the velocity
+  // Shuttle mesh: interpolated between physics steps, easing out any hand-off offset; the cork turns to
+  // lead along the velocity (a quick flip after each hit, like a real shuttle).
   const sm = world.shuttle;
   sm.visible = game.state !== 'menu' && game.state !== 'lobby';
-  sm.position.copy(shuttle.pos);
-  if (shuttle.active && !shuttle.landed && shuttle.vel.length() > 0.7) {
-    _dir.copy(shuttle.vel).normalize();
-    sm.quaternion.setFromUnitVectors(_up, _dir);
-  } else if (!shuttle.active) sm.quaternion.identity();
-  else if (shuttle.landed) sm.rotation.set(Math.PI / 2.4, 0, 0);
+  sm.position.lerpVectors(shuttle.prev, shuttle.pos, game.state === 'playing' ? acc / STEP : 1).add(shuttleOff);
+  shuttleOff.multiplyScalar(Math.exp(-dt / BLEND_S));
+  if (shuttle.active && !shuttle.landed && shuttle.vel.length() > 0.7) _qs.setFromUnitVectors(_up, _dir.copy(shuttle.vel).normalize());
+  else if (shuttle.landed) _qs.copy(_landTilt);
+  else if (!game.hitHold) _qs.identity();
+  sm.quaternion.slerp(_qs, game.state === 'playing' || game.state === 'replay' ? 1 - Math.exp(-dt * 28) : 1);
 
   const fog = fogOn();
   const fk = Math.min(1, dt * 3);
@@ -834,10 +993,11 @@ function frame() {
   fogWall.material.opacity += ((fog ? 0.22 + Math.sin(elapsed * 2) * 0.06 : 0) - fogWall.material.opacity) * fk;
   fogCurtain.visible = fogWall.visible = fogCurtain.material.opacity > 0.01;
   world.cpu.group.visible = !(fog && fogCurtain.material.opacity > 0.5);
-  if (fog && shuttle.pos.z < -0.05) sm.visible = false;
+  if (fog && sm.position.z < -0.05) sm.visible = false;
 
   game.excite = Math.max(0, game.excite - dt * 0.4);
   world.update(elapsed, dt, game.excite);
+  for (const a of Object.values(actors)) seatArm(a);
   fx.update(dt, elapsed, sm, shuttle.active && !shuttle.landed);
 
   // Camera
@@ -864,4 +1024,4 @@ function frame() {
 requestAnimationFrame(frame);
 
 // Test hook for automated checks
-window.__bb = { game, net, shuttle, actors, phone, playerSwing, act, get match() { return M; } };
+window.__bb = { game, net, shuttle, actors, phone, playerSwing, act, world, get match() { return M; } };
