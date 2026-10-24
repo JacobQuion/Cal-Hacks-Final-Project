@@ -49,11 +49,29 @@ export function connect({ subs, wire, onReady, onStatus }) {
   open();
 }
 
+/**
+ * Network delay to SpacetimeDB, measured from reducer round trips (a call resolves when the server's
+ * result comes back). oneWay() = one hop in seconds: a low percentile of recent round trips, halved, so a
+ * slow reducer or a hiccup doesn't skew it.
+ */
+const rtts = [];
+export const link = {
+  oneWay() {
+    if (!rtts.length) return 0.03;
+    const s = [...rtts].sort((a, b) => a - b);
+    return Math.min(0.2, s[Math.floor(s.length * 0.3)] / 2000);
+  },
+};
+
 /** Calls a reducer and turns server-side SenderErrors into a readable message. */
 export function call(conn, name, args, onError) {
   if (!conn) { onError?.('Not connected yet'); return; }
+  const t0 = performance.now();
   try {
-    Promise.resolve(conn.reducers[name](args)).catch(e => onError?.(clean(e)));
+    Promise.resolve(conn.reducers[name](args)).then(() => {
+      rtts.push(performance.now() - t0);
+      if (rtts.length > 15) rtts.shift();
+    }, e => onError?.(clean(e)));
   } catch (e) { onError?.(clean(e)); }
 }
 const clean = e => (e instanceof Error ? e.message : String(e)).replace(/^.*?SenderError:?\s*/i, '');
