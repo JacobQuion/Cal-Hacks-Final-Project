@@ -306,7 +306,7 @@ function renderLive() {
     .filter(m => (m.status === 'playing' || m.status === 'paused' || m.status === 'countdown') && m.id !== net.matchId)
     .slice(0, 6);
   $('liveList').innerHTML = live.length
-    ? live.map(m => `<li><span>${esc(m.nameA)} ${m.scoreA}–${m.scoreB} ${esc(m.nameB)}</span><button class="small-btn" data-watch="${m.code}">👀 Watch</button></li>`).join('')
+    ? live.map(m => `<li><span class="who">${esc(m.nameA)} <em>vs</em> ${esc(m.nameB)}</span><b class="score">${m.scoreA}–${m.scoreB}</b><button class="small-btn" data-watch="${m.code}">Watch</button></li>`).join('')
     : '<li class="hint">No matches being played</li>';
 }
 $('liveList').addEventListener('click', e => {
@@ -320,7 +320,7 @@ function renderHallOfFame() {
   const rows = [...net.conn.db.hallOfFame.iter()]
     .sort((a, b) => (a.at.microsSinceUnixEpoch < b.at.microsSinceUnixEpoch ? 1 : -1)).slice(0, 6);
   $('hofList').innerHTML = rows.length
-    ? rows.map(r => `<li><b>${esc(r.winner)}</b> beat ${esc(r.loser)} <span>${esc(r.score)}</span>${r.fastestSmashKmh ? ` <i>💥 ${Math.round(r.fastestSmashKmh)} km/h</i>` : ''}</li>`).join('')
+    ? rows.map(r => `<li><span class="who"><b>${esc(r.winner)}</b> <em>beat</em> ${esc(r.loser)}${r.fastestSmashKmh ? `<i>💥 ${Math.round(r.fastestSmashKmh)} km/h smash</i>` : ''}</span><b class="score">${esc(r.score)}</b></li>`).join('')
     : '<li class="hint">No matches yet</li>';
 }
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -411,7 +411,7 @@ function showLobby(m) {
   $('optFog').disabled = net.spectator || net.seat !== 0;
   $('optFogNote').textContent = net.seat !== 0 ? '(host decides)' : '';
   const lo = first(net.conn.db.myLoadout.iter());
-  $('optScout').checked = !!lo?.scout;
+  $('optScout').checked = lo ? lo.scout : m.mode === 'pvp';
   $('optScout').disabled = net.spectator;
   renderQR(m.code, net.seat);
 }
