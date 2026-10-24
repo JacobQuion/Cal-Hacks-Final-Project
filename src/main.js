@@ -68,7 +68,7 @@ const net = { conn: null, me: null, matchId: 0, seat: 0, spectator: false, watch
 let M = null;                     // current match row
 const game = {
   state: 'menu',                  // menu | lobby | countdown | playing | paused | results | replay
-  level: 1,
+  level: 0,
   phase: 'idle',                  // serve | rally | point (mirrors the match row)
   incoming: null,                 // { who, seq, contactPos, contactT, land, landIn, hit }
   lastHitter: null,
@@ -210,8 +210,6 @@ const video = createVideoCall({
 });
 function syncVideo() {
   const pvp = M && M.mode === 'pvp' && !net.spectator && game.state !== 'menu';
-  // In the lobby the call takes centre stage; once the match starts it docks to the side.
-  document.body.classList.toggle('video-stage', !!pvp && game.state === 'lobby');
   if (!pvp) { video.sync(null); return; }
   const opp = net.seat === 0 ? M.laptopB : M.laptopA;
   video.sync({ matchId: M.id, seat: net.seat, oppKey: opp || '', oppName: opp ? oppName(M) : '', myName: myName(M) || nameNow() });
@@ -404,6 +402,7 @@ function showLobby(m) {
   $('lobbyPlayers').innerHTML = row(m.nameA, m.readyA, !net.spectator && net.seat === 0) + row(m.nameB, m.readyB, !net.spectator && net.seat === 1);
   $('btnCopy').classList.toggle('hidden', ai || !!m.laptopB);
   $('btnCopy').dataset.url = `${publicBase()}/?join=${m.code}`;
+  if (inviteWaiter && !ai) { inviteWaiter($('btnCopy').dataset.url); inviteWaiter = null; }
   const myReady = net.seat === 0 ? m.readyA : m.readyB;
   // The phone is the racket: no paired, calibrated phone, no match (the server refuses it too).
   const noPhone = !phone.ready && !myReady;
@@ -765,6 +764,20 @@ $('btnReady').addEventListener('click', () => {
 });
 $('optFog').addEventListener('change', () => act('setFog', { on: $('optFog').checked }));
 $('optScout').addEventListener('change', () => act('setScout', { on: $('optScout').checked }));
+// "Copy a link to share": create the match and copy its invite link in one click. The code comes back
+// from the server later, so the clipboard gets a promise to keep the click's permission to write.
+let inviteWaiter = null;
+$('btnShare').addEventListener('click', () => {
+  initAudioSafe(); sfx.ui();
+  const url = new Promise(res => { inviteWaiter = res; });
+  const copied = () => say('Invite link copied. Send it to a friend!');
+  const failed = () => url.then(() => say(`Copy failed. Share code ${M?.code || ''}`));
+  const viaText = () => url.then(u => navigator.clipboard.writeText(u)).then(copied, failed);
+  try {
+    navigator.clipboard.write([new ClipboardItem({ 'text/plain': url.then(u => new Blob([u], { type: 'text/plain' })) })]).then(copied, viaText);
+  } catch { viaText(); }
+  act('createMatch', { mode: 'pvp', level: 1, name: nameNow() });
+});
 $('btnCopy').addEventListener('click', () => {
   navigator.clipboard?.writeText($('btnCopy').dataset.url).then(() => say('Invite link copied'), () => say(`Copy failed. Share code ${M?.code || ''}`));
 });
