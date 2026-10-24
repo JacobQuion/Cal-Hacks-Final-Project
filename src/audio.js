@@ -49,6 +49,7 @@ export const sfx = {
   point() { [0, 4, 7, 12].forEach((s, i) => tone(587 * 2 ** (s / 12), 0.2, { type: 'triangle', vol: 0.18, delay: i * 0.07 })); },
   lose() { tone(392, 0.18, { type: 'square', vol: 0.07, slide: -120 }); tone(262, 0.3, { type: 'square', vol: 0.07, slide: -90, delay: 0.14 }); },
   cheer(i = 0.5) { noise(1.3 + i, { freq: 1300, q: 0.5, vol: 0.12 + i * 0.18, attack: 0.15 }); },
+  hover() { tone(1180, 0.045, { type: 'triangle', vol: 0.09, slide: 220 }); },
   ui() { tone(880, 0.06, { type: 'triangle', vol: 0.2 }); tone(1320, 0.08, { type: 'triangle', vol: 0.15, delay: 0.04 }); },
   connect() { [0, 7, 12].forEach((s, i) => tone(660 * 2 ** (s / 12), 0.14, { type: 'triangle', vol: 0.16, delay: i * 0.08 })); },
   win() { [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => tone(523 * 2 ** (s / 12), 0.25, { type: 'triangle', vol: 0.16, delay: i * 0.09 })); },
