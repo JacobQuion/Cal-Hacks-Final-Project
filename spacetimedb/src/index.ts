@@ -711,7 +711,8 @@ function startPlay(ctx: Ctx, m: MatchRow) {
   for (const r of [...ctx.db.targetZone.matchId.filter(m.id)]) ctx.db.targetZone.id.delete(r.id);
   const lo = [...ctx.db.loadout.matchId.filter(m.id)];
   for (const seat of [0, 1]) {
-    const scouted = !!lo.find(l => l.seat === seat)?.scout;
+    // No lobby choice yet: 1v1 matches start with scouting on.
+    const scouted = lo.find(l => l.seat === seat)?.scout ?? m.mode === 'pvp';
     ctx.db.secret.insert({ id: 0, matchId: m.id, seat, armed: '', usedPower: false, usedCurve: false, usedFeint: false, scouted });
     ctx.db.stamina.insert({ id: 0, matchId: m.id, seat, value: 100 });
     ctx.db.readPick.insert({ id: 0, matchId: m.id, seat, guess: '', seq: 0, buff: false });
