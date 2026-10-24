@@ -584,7 +584,6 @@ body.arena #levelSeg button.on[data-level="2"] { background: var(--red); color: 
 button.mode-note { width: 100%; border: 0; font-family: inherit; cursor: pointer; transition: color .15s, background .15s; }
 button.mode-note:hover { color: var(--ink); }
 .mode .big-btn { margin-top: auto; font-size: 19px; padding: 14px 16px; }
-.play-tip { text-align: center; font-size: 14px; font-weight: 700; color: var(--sub); }
 
 /* contain:size lets the play card set the row height; the feed scrolls inside it. */
 .feed-card { display: flex; flex-direction: column; gap: 28px; padding: 24px; min-height: 0; contain: size; }
