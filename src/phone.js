@@ -1,7 +1,7 @@
 // Phone controller: pairs its own SpacetimeDB identity to one seat of a match, calibrates,
 // detects swings from motion sensors and sends them through reducers. Feedback (hits, score,
 // secret moves, stamina) arrives through subscriptions, views and event tables.
-import { connect, call, tables } from './stdb.js';
+import { connect, call, tables, link } from './stdb.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -17,13 +17,17 @@ const COOLDOWN_MS = 350;
 const AIM_RANGE_DEG = 32;                          // phone yaw that maps to full left/right aim
 const DIR_DEG = 18;                                // pitch change during a swing that counts as up/down
 const TWIST_RATIO = 0.6;                           // share of rotation around the phone's long axis that counts as a slice
+const CALM = 0.35;                                 // motion below this (and a phone not pointing up/down) = holding still to aim
+const DIR_LOOKBACK_MS = 160;                       // how far before the trigger a swing's up/down travel is measured from
 
 const cal = { ...DEFAULT_CAL, ...loadCal() };
 let center = null;           // heading (deg) when "Set center" was tapped
-let heading = null, pitch = 0, aim = 0;
+let heading = null, pitch = 0, aim = 0;   // aim: where the phone pointed while last held still (what a swing uses)
+let lastBusy = 0;                          // last time the phone was moving faster than CALM
 const pitchLog = [];         // recent { t, pitch } samples, to see which way a swing travelled
 let stage = 'connect';       // connect | motion | center | gentle | hard | play
 let calPeaks = [];
+let stageAt = 0;             // when the current calibration step began (the button tap itself isn't a swing)
 let tapMode = false;
 
 function loadCal() { try { return JSON.parse(localStorage.getItem('racket.cal')) || {}; } catch { return {}; } }
@@ -169,7 +173,11 @@ function onOrientation(e) {
   const now = performance.now();
   pitchLog.push({ t: now, pitch });
   while (pitchLog.length && now - pitchLog[0].t > 600) pitchLog.shift();
-  if (center !== null && heading !== null) {
+  if (swing) { swing.pMax = Math.max(swing.pMax, pitch); swing.pMin = Math.min(swing.pMin, pitch); }
+  // Aim only follows the phone while it is held fairly still and roughly level. Mid-swing (top edge
+  // pointing up and back for an overhead, sweeping round for a drive) the heading says nothing about
+  // where the player is aiming, so the aim stays where they pointed before the swing.
+  if (center !== null && heading !== null && now - lastBusy > 120 && Math.abs(pitch) < 60) {
     let d = heading - center;
     d = ((d + 540) % 360) - 180;
     aim = clamp(d / AIM_RANGE_DEG, -1, 1);
@@ -177,7 +185,7 @@ function onOrientation(e) {
 }
 
 // Swing intensity: whichever is stronger, wrist rotation or linear acceleration.
-let swing = null, lastSwingEnd = 0, meterVal = 0;
+let swing = null, lastSwingEnd = 0, lastPeak = 0, meterVal = 0;
 function onMotion(e) {
   const rr = e.rotationRate;
   const gyro = rr ? Math.hypot(rr.alpha || 0, rr.beta || 0, rr.gamma || 0) / 360 : 0;
@@ -192,50 +200,58 @@ function onMotion(e) {
   feed(Math.max(gyro, acc), performance.now(), twist);
 }
 
+// The gentle calibration step listens for softer swings than before, so a truly gentle swing registers.
 function trigger() {
-  return stage === 'play' ? Math.max(0.7, cal.gentle * 0.55) : 0.9;
+  if (stage === 'play') return Math.max(0.7, cal.gentle * 0.55);
+  return stage === 'gentle' ? 0.7 : 0.9;
 }
 
 function feed(s, now, twist = 0) {
   meterVal = Math.max(meterVal * 0.9, s);
+  if (s > CALM) lastBusy = now;
   if (swing) {
-    if (s > swing.peak) { swing.peak = s; swing.twist = twist; }
+    if (s > swing.peak) swing.peak = s;
+    swing.tw += twist * s; swing.ws += s;   // twist share over the whole swing, weighted by intensity
     const age = now - swing.start;
     if (age >= PEAK_WINDOW_MS || (age > 25 && s < swing.peak * 0.6)) {
       emitSwing(swing.peak, age, swing.aim, gestureOf(swing));
-      swing = null; lastSwingEnd = now;
+      lastPeak = swing.peak; swing = null; lastSwingEnd = now;
     }
-  } else if (s > trigger() && now - lastSwingEnd > COOLDOWN_MS) {
-    swing = { start: now, peak: s, aim, twist, pitch0: pitchAt(now - 80) };   // aim is sampled at swing start, before the motion skews it
+  } else if (s > trigger() && (now - lastSwingEnd > COOLDOWN_MS || s > lastPeak * 1.3) && now - stageAt > 600) {
+    // (inside the cooldown only a clearly harder swing counts: the real swing after a brisk backswing)
+    const before = pitchLog.filter(q => q.t >= now - DIR_LOOKBACK_MS).map(q => q.pitch);
+    if (!before.length) before.push(pitch);
+    // aim is the steady aim from before the swing; pitch extremes track how far the top edge travels
+    swing = { start: now, peak: s, aim, tw: twist * s, ws: s, pMax: Math.max(...before, pitch), pMin: Math.min(...before, pitch) };
   }
 }
 
-function pitchAt(t) {
-  for (let i = pitchLog.length - 1; i >= 0; i--) if (pitchLog[i].t <= t) return pitchLog[i].pitch;
-  return pitchLog.length ? pitchLog[0].pitch : pitch;
-}
 // Chop down = smash/attack, swing up = lift/clear, twist = slice drop, otherwise a flat forward swing.
+// Up/down is judged by how far the top edge has come from the highest (chop) or lowest (lift) point of
+// the swing so far, so it doesn't matter exactly when the backswing ended.
 function gestureOf(sw) {
-  const d = pitch - sw.pitch0;
-  const dir = d < -DIR_DEG ? 'down' : d > DIR_DEG ? 'up' : 'flat';
-  return { dir, slice: sw.twist > TWIST_RATIO && dir === 'flat' };
+  const drop = sw.pMax - pitch, rise = pitch - sw.pMin;
+  const dir = drop > rise ? (drop > DIR_DEG ? 'down' : 'flat') : (rise > DIR_DEG ? 'up' : 'flat');
+  return { dir, slice: sw.tw / Math.max(sw.ws, 1e-6) > TWIST_RATIO && dir === 'flat' };
 }
 
+// Full power at 90% of the calibrated hard swing: in a rally people rarely swing as hard as when asked to.
 function powerFromPeak(peak) {
-  const lo = cal.gentle * 0.85, hi = Math.max(cal.hard, cal.gentle * 1.4);
+  const lo = cal.gentle * 0.85, hi = Math.max(cal.hard * 0.9, cal.gentle * 1.4);
   return clamp((peak - lo) / (hi - lo), 0, 1.2);
 }
 
 function emitSwing(peak, lagMs, swingAim, gesture = { dir: 'flat', slice: false }) {
   if (stage === 'gentle' || stage === 'hard') return recordCalibration(peak);
   if (stage !== 'play') return;
-  act('phoneSwing', { power: +powerFromPeak(peak).toFixed(3), aim: +swingAim.toFixed(3), lag: Math.round(lagMs), dir: gesture.dir, slice: !!gesture.slice, tap: false });
+  // lag = time since the swing started + this phone's network hop (the laptop adds its own hop)
+  act('phoneSwing', { power: +powerFromPeak(peak).toFixed(3), aim: +swingAim.toFixed(3), lag: Math.round(lagMs + link.oneWay() * 1000), dir: gesture.dir, slice: !!gesture.slice, tap: false });
   $('pGesture').textContent = gesture.slice ? '↻ twist' : { down: '↓ chop', up: '↑ up', flat: '→ flat' }[gesture.dir];
 }
 
 // ---------- calibration ----------
 function startSwingStep(kind) {
-  stage = kind; calPeaks = [];
+  stage = kind; calPeaks = []; stageAt = performance.now();
   show('s-swing');
   $('swingTitle').textContent = kind === 'gentle' ? '3 gentle swings' : '3 HARD swings';
   $('swingText').textContent = kind === 'gentle'
@@ -265,10 +281,12 @@ function startPlay() {
 }
 
 // ---------- aim stream (throttled: only real changes, ~6/s) + meters ----------
+// Also sent every 2 s regardless: its round trip keeps link.oneWay() (the swing back-dating) current.
 let sentAim = 0, sentPitch = 0, lastAimSend = 0;
 setInterval(() => {
   const now = performance.now();
-  if (paired && stage === 'play' && !tapMode && now - lastAimSend > 160 && (Math.abs(aim - sentAim) > 0.04 || Math.abs(pitch - sentPitch) > 8)) {
+  const changed = !tapMode && (Math.abs(aim - sentAim) > 0.04 || Math.abs(pitch - sentPitch) > 8);
+  if (paired && stage === 'play' && now - lastAimSend > 160 && (changed || now - lastAimSend > 2000)) {
     lastAimSend = now; sentAim = aim; sentPitch = pitch;
     act('phoneAim', { aim: +aim.toFixed(3), pitch: Math.round(pitch) });
   }
@@ -287,7 +305,7 @@ $('pad').addEventListener('pointerdown', e => {
   const tapAim = clamp(((e.clientX - r.left) / r.width - 0.5) * 2.2, -1, 1);
   const y = (e.clientY - r.top) / r.height;
   const [tapPower, dir] = y < 0.25 ? [1, 'down'] : y > 0.75 ? [0.7, 'up'] : [0.6, 'flat'];
-  act('phoneSwing', { power: tapPower, aim: +tapAim.toFixed(3), lag: 0, dir, slice: false, tap: true });
+  act('phoneSwing', { power: tapPower, aim: +tapAim.toFixed(3), lag: Math.round(link.oneWay() * 1000), dir, slice: false, tap: true });
   aim = tapAim;
 });
 
