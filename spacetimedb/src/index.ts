@@ -503,7 +503,7 @@ function resolveRead(ctx: Ctx, m: MatchRow, hitter: number, realName: string) {
   const rd = readOf(ctx, m.id, reader);
   if (!rd) return;
   if (isAI(m, reader)) {
-    // The CPU reads too, at its secret-move rate, and is right about half the time.
+    // The NPC reads too, at its secret-move rate, and is right about half the time.
     const L = LEVELS[m.level] ?? LEVELS[1];
     const rnd = rngOf(ctx);
     if (rnd() >= L.secret) return;
@@ -634,7 +634,7 @@ function finishMatch(ctx: Ctx, m: MatchRow, winner: number, why: string) {
   ctx.db.hallOfFame.insert({
     id: 0, winner: seatName(m, winner), loser: seatName(m, other(winner)),
     score: winner === 0 ? `${m.scoreA}–${m.scoreB}` : `${m.scoreB}–${m.scoreA}`,
-    mode: m.mode === 'ai' ? `vs CPU ${LEVELS[m.level]?.name ?? ''}` : '1v1', fastestSmashKmh: fastest, longestRally: m.longestRally, at: ctx.timestamp,
+    mode: m.mode === 'ai' ? `vs NPC ${LEVELS[m.level]?.name ?? ''}` : '1v1', fastestSmashKmh: fastest, longestRally: m.longestRally, at: ctx.timestamp,
   });
   if (why) notice(ctx, m.id, why);
 }
@@ -719,7 +719,7 @@ export const createMatch = spacetimedb.reducer({ mode: t.string(), level: t.u8()
   const n = cleanName(name);
   const m = blankMatch(ctx, mode, Math.min(2, level));
   m.laptopA = hex(ctx); m.nameA = n;
-  if (mode === 'ai') { m.laptopB = 'AI'; m.nameB = `CPU · ${LEVELS[m.level].name}`; m.readyB = true; }
+  if (mode === 'ai') { m.laptopB = 'AI'; m.nameB = `NPC · ${LEVELS[m.level].name}`; m.readyB = true; }
   const row = ctx.db.match.insert(m);
   upsertDevice(ctx, { kind: 'laptop', name: n, matchId: row.id, seat: 0 });
 });
@@ -729,7 +729,7 @@ export const joinMatch = spacetimedb.reducer({ code: t.string(), name: t.string(
   if (!m) throw new SenderError(`No match with code ${code.toUpperCase()}`);
   const me = hex(ctx);
   if (m.laptopA === me || m.laptopB === me) return;
-  if (m.mode !== 'pvp') throw new SenderError('That is a match against the CPU');
+  if (m.mode !== 'pvp') throw new SenderError('That is a match against the NPC');
   if (m.laptopB) throw new SenderError('That match is full');
   leaveCurrent(ctx);
   const n = cleanName(name);
