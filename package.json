@@ -12,7 +12,9 @@
     "db:reset": "spacetime publish racket-rush --module-path spacetimedb --server local --yes --delete-data=always",
     "db:generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb",
     "db:cloud": "spacetime publish racket-rush --module-path spacetimedb --server maincloud --yes",
-    "dev:hmr": "RR_HMR=1 vite --host"
+    "dev:hmr": "RR_HMR=1 vite --host",
+    "build:cloud": "VITE_STDB_URI=wss://maincloud.spacetimedb.com vite build",
+    "deploy": "npm run db:cloud && npm run build:cloud && npx --yes wrangler@4 pages deploy dist --project-name racket-rush --branch main --commit-dirty=true"
   },
   "dependencies": {
     "qrcode": "^1.5.4",
