@@ -111,6 +111,9 @@ export type MatchStats = __Infer<typeof MatchStats>;
 export const MyDevice = __t.object("MyDevice", {});
 export type MyDevice = __Infer<typeof MyDevice>;
 
+export const MyFrame = __t.object("MyFrame", {});
+export type MyFrame = __Infer<typeof MyFrame>;
+
 export const MyLoadout = __t.object("MyLoadout", {});
 export type MyLoadout = __Infer<typeof MyLoadout>;
 
@@ -190,6 +193,14 @@ export const ReadPick = __t.object("ReadPick", {
   buff: __t.bool(),
 });
 export type ReadPick = __Infer<typeof ReadPick>;
+
+export const RtcFrame = __t.object("RtcFrame", {
+  to: __t.string(),
+  matchId: __t.u32(),
+  fromSeat: __t.u8(),
+  data: __t.string(),
+});
+export type RtcFrame = __Infer<typeof RtcFrame>;
 
 export const RtcMail = __t.object("RtcMail", {
   id: __t.u64(),

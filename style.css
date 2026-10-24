@@ -267,9 +267,35 @@ body.phone { background: radial-gradient(ellipse at 50% 0%, #1b1440 0%, #0a0b1c 
 .replay-bar.hidden + .replay-shot { display: none; }
 .replay-shot.go { animation: replayShot .35s ease-out; }
 @keyframes replayShot { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
-.end-bar { border-color: #ffd23f; }
-.end-title { font-weight: 700; font-size: 20px; color: #ffd23f; }
-.end-score { font-weight: 700; font-size: 20px; color: #fff; }
+/* Match over: big centred final score */
+.end-card {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5;
+  width: min(560px, calc(100vw - 32px)); padding: 22px 26px 20px; border-radius: 22px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; color: #fff;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 210, 63, .22), transparent 60%), linear-gradient(180deg, rgba(16, 20, 38, .94), rgba(6, 8, 16, .96));
+  border: 2px solid rgba(255, 210, 63, .75);
+  box-shadow: 0 0 0 100vmax rgba(3, 4, 10, .45), 0 30px 80px rgba(0, 0, 0, .6), 0 0 60px rgba(255, 210, 63, .18);
+}
+.end-card.lost {
+  border-color: rgba(185, 196, 255, .45);
+  background: radial-gradient(ellipse at 50% 0%, rgba(140, 160, 255, .16), transparent 60%), linear-gradient(180deg, rgba(16, 20, 38, .94), rgba(6, 8, 16, .96));
+  box-shadow: 0 0 0 100vmax rgba(3, 4, 10, .45), 0 30px 80px rgba(0, 0, 0, .6);
+}
+.end-card.go { animation: endIn .55s var(--spring) both; }
+@keyframes endIn { from { opacity: 0; transform: translate(-50%, -46%) scale(.86); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+.end-kicker { font-size: 13px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: #9aa6cc; }
+.end-title { font-size: clamp(30px, 5vw, 46px); font-weight: 900; line-height: 1; color: #ffd23f; text-shadow: 0 0 30px rgba(255, 210, 63, .45); }
+.end-card.lost .end-title { color: #fff; text-shadow: 0 4px 20px rgba(0, 0, 0, .7); }
+.end-line { width: 100%; display: flex; align-items: center; justify-content: center; gap: clamp(14px, 4vw, 34px); margin: 8px 0 12px; }
+.end-side { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; flex: 1; }
+.end-side b { font-size: clamp(72px, 14vw, 128px); font-weight: 900; line-height: .9; font-variant-numeric: tabular-nums; color: rgba(255, 255, 255, .55); }
+.end-side.won b { color: #fff; text-shadow: 0 0 40px rgba(255, 210, 63, .55), 0 6px 20px rgba(0, 0, 0, .6); }
+.end-side span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #9aa6cc; }
+.end-side.won span { color: #ffd23f; }
+.end-dash { font-size: clamp(40px, 7vw, 64px); font-weight: 900; color: rgba(255, 255, 255, .3); }
+.end-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.end-btns .small-btn { padding: 8px 14px; font-size: 15px; }
+body.arena .end-btns .small-btn.primary { background: linear-gradient(180deg, #ffe07a, #ffb700); color: #1a1405; border-color: rgba(255, 230, 150, .6); }
 
 /* Reads, scouting, live list */
 .reads button { border-color: #00e5ff; color: #bff6ff; }
@@ -297,10 +323,42 @@ body.phone { background: radial-gradient(ellipse at 50% 0%, #1b1440 0%, #0a0b1c 
 
 /* Lobby options + fog */
 .opt { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); text-align: left; cursor: pointer; }
-.opt input { margin-top: 2px; width: 18px; height: 18px; accent-color: #8a5cff; flex: none; }
+.opt input { margin-top: 2px; width: 18px; height: 18px; accent-color: #ffd23f; flex: none; }
 .opt b { color: var(--ink); }
-.opt i { color: #8a5cff; font-style: normal; font-weight: 600; }
-.fog-chip { background: #2a2350; color: #e0d6ff; border-color: #8a5cff; }
+.opt i { color: #ffd23f; font-style: normal; font-weight: 600; }
+.fog-chip { display: flex; align-items: center; gap: 8px; }
+.fog-chip b { font-weight: 800; }
+.fog-chip span { opacity: .75; font-weight: 600; }
+
+/* Fog of war: mist at the top of the screen, and a banner when it rolls in or lifts */
+.fog-veil {
+  position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 1.2s ease;
+  background:
+    radial-gradient(ellipse 60% 35% at 20% 0%, rgba(205, 214, 230, .32), transparent 70%),
+    radial-gradient(ellipse 55% 30% at 80% 4%, rgba(205, 214, 230, .26), transparent 70%),
+    linear-gradient(180deg, rgba(170, 182, 204, .28), transparent 42%);
+  background-size: 200% 100%, 200% 100%, 100% 100%;
+  animation: veilDrift 18s ease-in-out infinite alternate;
+}
+.fog-veil.on { opacity: 1; }
+@keyframes veilDrift { from { background-position: 0% 0, 100% 0, 0 0; } to { background-position: 100% 0, 0% 0, 0 0; } }
+.fog-banner {
+  position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; opacity: 0;
+}
+.fog-banner b {
+  font-size: clamp(38px, 6vw, 72px); font-weight: 900; letter-spacing: 6px; line-height: 1; color: #eef2fa;
+  text-shadow: 0 0 30px rgba(210, 220, 240, .8), 0 0 80px rgba(160, 175, 205, .6), 0 6px 18px rgba(0, 0, 0, .7);
+}
+.fog-banner span { font-size: clamp(14px, 1.6vw, 19px); font-weight: 600; color: #d3dbea; text-shadow: 0 2px 10px rgba(0, 0, 0, .9); }
+.fog-banner.show { animation: fogIn 2.6s ease forwards; }
+.fog-banner.show.lift { animation-duration: 1.6s; }
+@keyframes fogIn {
+  0% { opacity: 0; filter: blur(14px); transform: translate(-50%, -50%) scale(1.08); }
+  18% { opacity: 1; filter: blur(0); transform: translate(-50%, -50%) scale(1); }
+  78% { opacity: 1; filter: blur(0); }
+  100% { opacity: 0; filter: blur(10px); transform: translate(-50%, -54%) scale(.98); }
+}
 
 /* ---------- 1v1 video call (right side) ---------- */
 .video-panel {
@@ -323,6 +381,13 @@ body.phone { background: radial-gradient(ellipse at 50% 0%, #1b1440 0%, #0a0b1c 
 .vtile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s; }
 .vtile.me video { transform: scaleX(-1); }
 .vtile.live video { opacity: 1; }
+.vtile .vrelay { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s; }
+.vtile.relay .vrelay { opacity: 1; }
+.vtile.relay .vph { display: none; }
+.vtile.relay::after {
+  content: "RELAY · NO AUDIO"; position: absolute; top: 6px; left: 6px; padding: 2px 6px; border-radius: 6px;
+  font-size: 9px; font-weight: 700; letter-spacing: .8px; color: #dfe6ff; background: rgba(0, 0, 0, .55);
+}
 .vph {
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   color: #c9d2f2; font-size: 12px; font-weight: 600; text-align: center; padding: 8px;
@@ -463,7 +528,14 @@ body.arena .chip {
   background: linear-gradient(180deg, rgba(20, 26, 46, .86), rgba(9, 12, 24, .9)); box-shadow: 0 6px 16px rgba(0, 0, 0, .35);
 }
 body.arena .chip.level { background: var(--red); border-color: rgba(255, 140, 160, .5); }
-body.arena .fog-chip { background: rgba(42, 35, 80, .9); border-color: #8a5cff; }
+body.arena .fog-chip {
+  color: #f2f5fb; border-color: rgba(220, 228, 242, .45);
+  background: linear-gradient(100deg, rgba(120, 132, 156, .75), rgba(190, 200, 220, .55), rgba(120, 132, 156, .75));
+  background-size: 200% 100%; animation: fogShimmer 6s linear infinite; backdrop-filter: blur(6px);
+}
+@keyframes fogShimmer { to { background-position: -200% 0; } }
+body.arena .end-card, body.arena .fog-banner { font-family: "Barlow", sans-serif; }
+body.arena .end-title, body.arena .end-side b, body.arena .end-dash, body.arena .fog-banner b { font-family: "Barlow Condensed", sans-serif; font-style: italic; }
 body.arena .pause-btn {
   border-radius: 12px; border: 1px solid rgba(255, 255, 255, .16); color: #fff;
   background: linear-gradient(180deg, rgba(20, 26, 46, .86), rgba(9, 12, 24, .9)); box-shadow: 0 6px 16px rgba(0, 0, 0, .35);
@@ -480,5 +552,5 @@ body.arena .stamina { font-family: "Barlow Condensed", sans-serif; letter-spacin
 body.arena .stamina .bar { border: 1px solid rgba(255, 255, 255, .15); background: rgba(0, 0, 0, .4); }
 body.arena .secrets button, body.arena .scout-btn { font-family: "Barlow Condensed", sans-serif; letter-spacing: .5px; font-size: 14px; border-width: 1px; border-radius: 8px; backdrop-filter: blur(8px); }
 body.arena .replay-bar, body.arena .replay-shot, body.arena .scout-panel { font-family: "Barlow", sans-serif; backdrop-filter: blur(12px); border-width: 1px; border-radius: 12px; }
-body.arena .end-title, body.arena .replay-tag { font-family: "Barlow Condensed", sans-serif; font-style: italic; letter-spacing: 1px; }
+body.arena .replay-tag { font-family: "Barlow Condensed", sans-serif; font-style: italic; letter-spacing: 1px; }
 body.arena .video-panel, body.arena .vname { font-family: "Barlow", sans-serif; }

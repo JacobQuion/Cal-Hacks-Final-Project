@@ -289,6 +289,19 @@ const rtcMail = table(
   }
 );
 
+// Video fallback when the peer-to-peer call can't connect (strict NATs, venue wifi without TURN):
+// each laptop posts small JPEG frames of its camera, one row per recipient, overwritten in place.
+// PRIVATE like rtc_mail: only the addressee reads it, through the my_frame view.
+const rtcFrame = table(
+  { name: 'rtc_frame' },
+  {
+    to: t.string().primaryKey(),     // recipient laptop identity hex
+    matchId: t.u32(),
+    fromSeat: t.u8(),
+    data: t.string(),                // JPEG data URL, or '' when the sender's camera is off
+  }
+);
+
 // ───────────────────────── schedule table ─────────────────────────
 
 // One-shot timers: start, serve_ready, land, ai_hit, ai_serve, idle_serve
@@ -308,7 +321,7 @@ const spacetimedb = schema({
   device, match, shotFeed, hallOfFame, queue,
   shot, shotLog, secret, stamina, readPick, targetZone, pointLog, loadout,
   swingEvent, aimEvent, hitEvent, rallyEvent, readEvent, noticeEvent,
-  rtcMail, timer,
+  rtcMail, rtcFrame, timer,
 });
 export default spacetimedb;
 
@@ -438,6 +451,7 @@ function blankMatch(ctx: Ctx, mode: string, level: number): MatchRow {
 function leaveCurrent(ctx: Ctx) {
   ctx.db.queue.identity.delete(ctx.sender);
   for (const r of [...ctx.db.rtcMail.to.filter(hex(ctx))]) ctx.db.rtcMail.id.delete(r.id);
+  ctx.db.rtcFrame.to.delete(hex(ctx));
   const d = ctx.db.device.identity.find(ctx.sender);
   if (!d || d.matchId === 0) return;
   const m = ctx.db.match.id.find(d.matchId);
@@ -679,6 +693,17 @@ function missingDevice(ctx: Ctx, m: MatchRow): string {
   return '';
 }
 
+/** A seat whose paired phone is online but still calibrating — the match must not start (or go on) around it. */
+function calibratingSeat(ctx: Ctx, m: MatchRow): number {
+  for (const seat of [0, 1]) {
+    const id = seatPhone(m, seat);
+    if (!id) continue;
+    const d = [...ctx.db.device.iter()].find(x => x.identity.toHexString() === id);
+    if (d && d.online && !d.ready && d.matchId === m.id && d.seat === seat) return seat;
+  }
+  return -1;
+}
+
 function startPlay(ctx: Ctx, m: MatchRow) {
   for (const r of [...ctx.db.secret.matchId.filter(m.id)]) ctx.db.secret.id.delete(r.id);
   for (const r of [...ctx.db.stamina.matchId.filter(m.id)]) ctx.db.stamina.id.delete(r.id);
@@ -788,8 +813,9 @@ export const leaveMatch = spacetimedb.reducer(ctx => {
 export const setReady = spacetimedb.reducer({ ready: t.bool() }, (ctx, { ready }) => {
   const { m, seat } = myLaptopSeat(ctx);
   if (m.status !== 'lobby') return;
+  if (ready && calibratingSeat(ctx, m) === seat) throw new SenderError('Finish calibrating your phone first');
   const next = seat === 0 ? { ...m, readyA: ready } : { ...m, readyB: ready };
-  if (next.readyA && next.readyB && next.laptopB) {
+  if (next.readyA && next.readyB && next.laptopB && calibratingSeat(ctx, next) < 0) {
     next.status = 'countdown';
     next.startsAt = now(ctx) + ms(3000);
     schedule(ctx, m.id, 'start', 3000);
@@ -830,14 +856,31 @@ export const pairPhone = spacetimedb.reducer({ code: t.string(), seat: t.u8() },
     if (old) ctx.db.device.identity.update({ ...old, matchId: 0, seat: NONE });
   }
   ctx.db.match.id.update(seat === 0 ? { ...m, phoneA: me } : { ...m, phoneB: me });
-  upsertDevice(ctx, { kind: 'phone', name: `${seatName(m, seat)}'s phone`, matchId: m.id, seat, ready: false });
-  notice(ctx, m.id, `📱 ${seatName(m, seat)}'s phone paired`);
+  // A phone reconnecting to the same seat stays calibrated; a new pairing starts uncalibrated.
+  const cur = ctx.db.device.identity.find(ctx.sender);
+  const again = !!cur && cur.kind === 'phone' && cur.matchId === m.id && cur.seat === seat;
+  upsertDevice(ctx, { kind: 'phone', name: `${seatName(m, seat)}'s phone`, matchId: m.id, seat, ready: again && cur.ready });
+  if (!again) notice(ctx, m.id, `📱 ${seatName(m, seat)}'s phone paired`);
 });
 
 export const phoneStatus = spacetimedb.reducer({ ready: t.bool(), tapMode: t.bool() }, (ctx, { ready, tapMode }) => {
   const d = ctx.db.device.identity.find(ctx.sender);
   if (!d || d.kind !== 'phone') throw new SenderError('Not a paired phone');
   ctx.db.device.identity.update({ ...d, ready, tapMode, online: true });
+  const m = d.matchId ? ctx.db.match.id.find(d.matchId) : undefined;
+  if (!m || d.seat === NONE) return;
+  const who = seatName(m, d.seat);
+  if (!ready) {
+    // Calibrating: the match waits. Unready this seat in the lobby, cancel a countdown, pause a live match.
+    const unready = d.seat === 0 ? { readyA: false } : isAI(m, 1) ? {} : { readyB: false };
+    if (m.status === 'lobby') ctx.db.match.id.update({ ...m, ...unready });
+    else if (m.status === 'countdown') {
+      ctx.db.match.id.update({ ...m, ...unready, status: 'lobby', startsAt: 0n });
+      notice(ctx, m.id, `📱 Waiting for ${who}'s phone to finish calibrating`);
+    } else if (m.status === 'playing') pauseMatch(ctx, m, `${who} is calibrating their phone`);
+  } else if (m.status === 'paused' && m.pausedReason.includes('calibrating') && calibratingSeat(ctx, m) < 0 && !missingDevice(ctx, m)) {
+    resumeMatch(ctx, m);
+  }
 });
 
 export const phoneSwing = spacetimedb.reducer(
@@ -863,6 +906,18 @@ export const rtcSignal = spacetimedb.reducer({ data: t.string() }, (ctx, { data 
   if (!to || to === 'AI') return;
   if (data.length > 16_000) throw new SenderError('Signal too large');
   ctx.db.rtcMail.insert({ id: 0n, to, matchId: m.id, fromSeat: seat, data });
+});
+
+/** Video fallback: replace the camera frame waiting for the other laptop ('' = camera off). */
+export const rtcSendFrame = spacetimedb.reducer({ data: t.string() }, (ctx, { data }) => {
+  const { m, seat } = myLaptopSeat(ctx);
+  if (m.mode !== 'pvp') return;
+  const to = seatLaptop(m, other(seat));
+  if (!to || to === 'AI') return;
+  if (data.length > 40_000) throw new SenderError('Frame too large');
+  if (data && !data.startsWith('data:image/jpeg;base64,')) throw new SenderError('Frames are JPEG data URLs');
+  const row = { to, matchId: m.id, fromSeat: seat, data };
+  if (ctx.db.rtcFrame.to.find(to)) ctx.db.rtcFrame.to.update(row); else ctx.db.rtcFrame.insert(row);
 });
 
 /** Video call: delete the signaling messages this laptop has read (everything up to `upTo`). */
@@ -956,7 +1011,7 @@ export const onTimer = spacetimedb.reducer({ onSchedule: timer }, { arg: timer.r
   if (!m) return;
   switch (arg.kind) {
     case 'start':
-      if (m.status === 'countdown') startPlay(ctx, m);
+      if (m.status === 'countdown' && calibratingSeat(ctx, m) < 0) startPlay(ctx, m);
       return;
     case 'serve_ready': {
       if (m.status !== 'playing' || m.phase !== 'point' || m.pointNo !== arg.seq) return;
@@ -1101,6 +1156,11 @@ export const myShot = spacetimedb.view({ name: 'my_shot', public: true }, shot.r
 /** Video call signaling addressed to you — nobody else can read it. */
 export const myRtc = spacetimedb.view({ name: 'my_rtc', public: true }, t.array(rtcMail.rowType), ctx => {
   return [...ctx.db.rtcMail.to.filter(ctx.sender.toHexString())];
+});
+
+/** The latest relayed camera frame addressed to you (video fallback). */
+export const myFrame = spacetimedb.view({ name: 'my_frame', public: true }, rtcFrame.rowType.optional(), ctx => {
+  return ctx.db.rtcFrame.to.find(ctx.sender.toHexString()) ?? undefined;
 });
 
 /** Your lobby choices (scouting), hidden from the opponent. */

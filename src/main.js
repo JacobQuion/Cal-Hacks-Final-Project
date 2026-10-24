@@ -26,19 +26,43 @@ const world = createWorld($('game'));
 const fx = new FX(world.scene, world.camera);
 const shuttle = new Shuttle();
 
-// Fog of war: a dark curtain over the opponent's half (local −Z). The data behind it really isn't
-// on this laptop — the server withholds the opponent's shot until it crosses the net.
-const fogCurtain = new THREE.Mesh(
-  new THREE.BoxGeometry(11, 7, 9.2),
-  new THREE.MeshBasicMaterial({ color: 0x05060d, transparent: true, opacity: 0, depthWrite: false }),
-);
-fogCurtain.position.set(0, 3.5, -4.7); fogCurtain.renderOrder = 5; world.scene.add(fogCurtain);
-const fogWall = new THREE.Mesh(
-  new THREE.PlaneGeometry(11, 4),
-  new THREE.MeshBasicMaterial({ color: 0x8a5cff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
-);
-fogWall.position.set(0, 2, -0.12); fogWall.renderOrder = 6; world.scene.add(fogWall);
+// Fog of war: a bank of drifting mist over the opponent's half (local −Z). The data behind it really
+// isn't on this laptop — the server withholds the opponent's shot until it crosses the net.
+// Layers of animated noise (thin at the net, thick toward the back) that hug the floor and drift sideways.
+const FOG_LAYERS = 11;
+const fogUniforms = { uTime: { value: 0 }, uAmount: { value: 0 } };
+const fogMat = layer => new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  uniforms: { ...fogUniforms, uSeed: { value: layer * 7.13 }, uDepth: { value: layer / (FOG_LAYERS - 1) } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `
+    uniform float uTime, uAmount, uSeed, uDepth; varying vec2 vUv;
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+    float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int k = 0; k < 5; k++) { v += a * n(p); p = p * 2.03 + 17.0; a *= 0.5; } return v; }
+    void main() {
+      vec2 p = vUv * vec2(4.0, 1.8) + vec2(uSeed, uSeed * 0.37);
+      float t = uTime * (0.05 + 0.03 * uDepth);
+      float d = fbm(p + vec2(t, t * 0.2) + 0.6 * fbm(p * 0.7 - vec2(t * 0.6, 0.0)));
+      float ground = 1.0 - smoothstep(0.15, 0.95, vUv.y);           // thickest at the floor
+      float sides = smoothstep(0.0, 0.18, vUv.x) * smoothstep(1.0, 0.82, vUv.x);
+      float a = smoothstep(0.28, 0.85, d) * (0.35 + 0.65 * ground) * sides;
+      a *= mix(0.32, 0.9, uDepth) * uAmount;
+      vec3 col = mix(vec3(0.58, 0.63, 0.72), vec3(0.86, 0.89, 0.95), d);  // grey-blue mist, brighter where dense
+      gl_FragColor = vec4(col, clamp(a, 0.0, 1.0));
+    }`,
+});
+const fogBank = new THREE.Group();
+for (let i = 0; i < FOG_LAYERS; i++) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(15, 6.5), fogMat(i));
+  m.position.set(0, 3.0, -0.35 - i * 0.92);
+  m.renderOrder = 5 + (FOG_LAYERS - i);   // far layers first, so the mist stacks back to front
+  fogBank.add(m);
+}
+fogBank.visible = false; world.scene.add(fogBank);
 const fogOn = () => !!M && M.fogLeft > 0 && (game.state === 'playing' || game.state === 'paused');
+let fogShown = 0;   // last fogLeft we put on screen, to announce fog rolling in and lifting
 
 const net = { conn: null, me: null, matchId: 0, seat: 0, spectator: false, watchCode: (params.get('watch') || '').toUpperCase() };
 let M = null;                     // current match row
@@ -96,7 +120,15 @@ function animateActor(a, dt, t) {
   // Movement
   const d = new THREE.Vector3().subVectors(a.target, a.pos); d.y = 0;
   const dist = d.length();
-  const stepLen = Math.min(dist, a.speed * dt);
+  // Running for an incoming shot: always fast enough to get there in time. A shot that only appears
+  // at the net (fog of war) leaves a fraction of a second, which normal running speed can't cover.
+  let speed = a.speed;
+  const inc = game.incoming;
+  if (inc && !inc.hit && actors[inc.who] === a) {
+    const left = (inc.contactT - game.gameT) / TIME_SCALE - 0.06;
+    speed = Math.min(30, Math.max(speed, dist / Math.max(0.08, left)));
+  }
+  const stepLen = Math.min(dist, speed * dt);
   if (dist > 0.01) a.pos.addScaledVector(d.normalize(), stepLen);
   a.moving += ((dist > 0.05 ? 1 : 0) - a.moving) * Math.min(1, dt * 10);
   a.step += dt * 14 * a.moving;
@@ -135,7 +167,7 @@ connect({
   subs: [
     tables.match, tables.shotFeed, tables.myShot, tables.myLoadout, tables.device, tables.hallOfFame, tables.queue,
     tables.myDevice, tables.mySecret, tables.myStamina, tables.condition, tables.matchStats, tables.matchLog,
-    tables.myRead, tables.myTarget, tables.scoutingReport, tables.myRtc,
+    tables.myRead, tables.myTarget, tables.scoutingReport, tables.myRtc, tables.myFrame,
     tables.swingEvent, tables.aimEvent, tables.hitEvent, tables.rallyEvent, tables.readEvent, tables.noticeEvent,
   ],
   wire(conn) {
@@ -152,8 +184,11 @@ connect({
     conn.db.hitEvent.onInsert((_c, e) => onHitEvent(e));
     conn.db.rallyEvent.onInsert((_c, e) => onRallyEvent(e));
     conn.db.readEvent.onInsert((_c, e) => onReadEvent(e));
-    conn.db.noticeEvent.onInsert((_c, e) => { if (e.matchId === net.matchId) say(e.text); });
+    // Fog rolling in / lifting gets its own banner (from the match row), not a toast.
+    conn.db.noticeEvent.onInsert((_c, e) => { if (e.matchId === net.matchId && !/^(🌫|🌤)/u.test(e.text)) say(e.text); });
     conn.db.myRtc.onInsert((_c, row) => video.receive(row));
+    conn.db.myFrame.onInsert((_c, row) => video.frame(row));
+    conn.db.myFrame.onUpdate?.((_c, _o, row) => video.frame(row));
   },
   onReady(conn, me) {
     net.conn = conn; net.me = me;
@@ -172,6 +207,7 @@ connect({
 const video = createVideoCall({
   send: data => call(net.conn, 'rtcSignal', { data }, e => console.warn('video signal:', e)),
   ack: upTo => call(net.conn, 'rtcAck', { upTo }, () => {}),
+  sendFrame: data => net.conn?.reducers.rtcSendFrame({ data }),
 });
 function syncVideo() {
   const pvp = M && M.mode === 'pvp' && !net.spectator;
@@ -316,7 +352,12 @@ function applyMatch(m) {
     a: mySeatScore(m), b: oppSeatScore(m), serving: m.server === net.seat ? 0 : 1 });
   game.level = m.level;
   $('fogChip').classList.toggle('hidden', !(m.fogLeft > 0));
-  $('fogChip').textContent = `🌫 FOG · ${m.fogLeft} ${m.fogLeft === 1 ? 'rally' : 'rallies'}`;
+  $('fogChipLeft').textContent = `${m.fogLeft} ${m.fogLeft === 1 ? 'rally' : 'rallies'} left`;
+  if (m.status === 'playing' && m.fogLeft !== fogShown) {
+    if (m.fogLeft > fogShown) fogBanner('FOG OF WAR', 'You only see the shuttle once it crosses the net');
+    else if (m.fogLeft === 0) fogBanner('THE FOG LIFTS', '');
+  }
+  fogShown = m.status === 'playing' || m.status === 'paused' ? m.fogLeft : 0;
 
   if (m.status === 'lobby') return showLobby(m);
   if (m.status === 'countdown') return startCountdown();
@@ -343,6 +384,16 @@ function applyMatch(m) {
   if (m.phase === 'point') { game.incoming = null; fx.setTiming(null, null); fx.setLanding(null); }
 }
 
+let fogBannerTimer = 0;
+function fogBanner(title, sub) {
+  const b = $('fogBanner');
+  $('fogBannerTitle').textContent = title; $('fogBannerSub').textContent = sub;
+  b.classList.remove('show', 'lift'); void b.offsetWidth;
+  b.classList.add('show'); b.classList.toggle('lift', !sub);
+  clearTimeout(fogBannerTimer);
+  fogBannerTimer = setTimeout(() => b.classList.remove('show'), sub ? 2600 : 1600);
+}
+
 function showLobby(m) {
   game.state = 'lobby'; hud.show(false); showScreen('lobby');
   $('endBar').classList.add('hidden');
@@ -353,7 +404,11 @@ function showLobby(m) {
   $('inviteBox').classList.toggle('hidden', ai || !!m.laptopB);
   $('inviteUrl').textContent = `${publicBase()}/?join=${m.code}`;
   const myReady = net.seat === 0 ? m.readyA : m.readyB;
-  $('btnReady').textContent = ai ? '▶ Start match' : myReady ? '✖ Not ready' : m.laptopB ? '✋ Ready' : '✋ Ready (waiting for player 2)';
+  // A phone that's still calibrating holds the match back (the server refuses to start it too).
+  const calibrating = phone.connected && !phone.ready;
+  $('btnReady').disabled = calibrating && !myReady;
+  $('btnReady').textContent = calibrating && !myReady ? '📱 Finish calibrating your phone…'
+    : ai ? '▶ Start match' : myReady ? '✖ Not ready' : m.laptopB ? '✋ Ready' : '✋ Ready (waiting for player 2)';
   $('btnReady').classList.toggle('hidden', net.spectator);
   $('optFog').checked = m.fogEnabled;
   $('optFog').disabled = net.spectator || net.seat !== 0;
@@ -440,7 +495,7 @@ function onShot(row) {
   const p = toLocal({ x: row.px, y: row.py, z: row.pz }), v = toLocal({ x: row.vx, y: row.vy, z: row.vz });
   const who = row.hitter === net.seat ? 'you' : 'cpu';
   // Out of the fog: the shuttle appears at the net — the swing that sent it was never seen.
-  if (row.fromNet) { fx.puff({ x: p.x, z: p.z }, 0x8a5cff); sfx.net(); }
+  if (row.fromNet) { fx.puff({ x: p.x, z: p.z }, 0xdfe6f2); sfx.net(); }
   else if (who === 'cpu' || net.spectator) startSwing(actors[who], game.phase === 'serve' ? 'low' : swingKind(p.y));
   shuttle.launch(p, v);
   fx.resetTrail(); fx.setTrailColor(row.smash ? 0xff2bd6 : 0xc6ff00);
@@ -494,14 +549,14 @@ function onRallyEvent(e) {
   const you = net.seat === 0 ? e.scoreA : e.scoreB, opp = net.seat === 0 ? e.scoreB : e.scoreA;
   const target = M?.target ?? 11;
   if (!net.spectator && Math.max(you, opp) >= target - 1 && Math.abs(you - opp) >= 1 && Math.max(you, opp) < target + 2) {
-    setTimeout(() => hud.toast(you > opp ? '🔥 MATCH POINT!' : '😬 Opponent match point', 1500), 900);
+    setTimeout(() => { if (game.state === 'playing') hud.toast(you > opp ? '🔥 MATCH POINT!' : '😬 Opponent match point', 1500); }, 900);
   }
 }
 
 function onPhoneSwing(e) {
   if (!mine(e)) return;
   phone.aim = e.aim;
-  if (game.state === 'lobby' && M && !(net.seat === 0 ? M.readyA : M.readyB)) { act('setReady', { ready: true }); return; }
+  if (game.state === 'lobby' && M && !(net.seat === 0 ? M.readyA : M.readyB)) { if (phone.ready) act('setReady', { ready: true }); return; }
   if (game.state === 'results') { act('rematch'); return; }
   if (game.state === 'playing') playerSwing(e.power, e.aim, (e.lag || 0) / 1000 + LINK_LATENCY, { dir: e.dir, slice: e.slice });
 }
@@ -548,9 +603,15 @@ function enterEnded(m) {
   fx.setTiming(null, null); fx.setLanding(null);
   showScreen(null); hud.show(true);
   const win = m.winner === net.seat;
-  $('endTitle').textContent = net.spectator ? `${seatName(m, m.winner)} wins` : win ? '🏆 YOU WIN!' : `${oppName(m)} wins`;
-  $('endScore').textContent = `${mySeatScore(m)} – ${oppSeatScore(m)}`;
-  $('endBar').classList.remove('hidden');
+  const ptsYou = mySeatScore(m), ptsOpp = oppSeatScore(m);
+  $('endTitle').textContent = net.spectator ? `${seatName(m, m.winner).toUpperCase()} WINS` : win ? 'YOU WIN!' : `${oppName(m).toUpperCase()} WINS`;
+  $('endNameYou').textContent = net.spectator ? m.nameA || 'Player 1' : myName(m) || 'You';
+  $('endNameOpp').textContent = net.spectator ? m.nameB || 'Player 2' : oppName(m);
+  $('endScoreYou').textContent = ptsYou; $('endScoreOpp').textContent = ptsOpp;
+  $('endSideYou').classList.toggle('won', ptsYou > ptsOpp); $('endSideOpp').classList.toggle('won', ptsOpp > ptsYou);
+  const card = $('endBar');
+  card.classList.toggle('lost', !win && !net.spectator);
+  card.classList.remove('hidden', 'go'); void card.offsetWidth; card.classList.add('go');
   if (win) { sfx.win(); sfx.cheer(1); } else sfx.lose();
 }
 
@@ -829,11 +890,12 @@ function frame() {
   else if (shuttle.landed) sm.rotation.set(Math.PI / 2.4, 0, 0);
 
   const fog = fogOn();
-  const fk = Math.min(1, dt * 3);
-  fogCurtain.material.opacity += ((fog ? 0.93 : 0) - fogCurtain.material.opacity) * fk;
-  fogWall.material.opacity += ((fog ? 0.22 + Math.sin(elapsed * 2) * 0.06 : 0) - fogWall.material.opacity) * fk;
-  fogCurtain.visible = fogWall.visible = fogCurtain.material.opacity > 0.01;
-  world.cpu.group.visible = !(fog && fogCurtain.material.opacity > 0.5);
+  const amount = fogUniforms.uAmount;
+  amount.value += ((fog ? 1 : 0) - amount.value) * Math.min(1, dt * 1.6);
+  fogUniforms.uTime.value = elapsed;
+  fogBank.visible = amount.value > 0.01;
+  $('fogVeil').classList.toggle('on', fog);
+  world.cpu.group.visible = !(fog && amount.value > 0.5);
   if (fog && shuttle.pos.z < -0.05) sm.visible = false;
 
   game.excite = Math.max(0, game.excite - dt * 0.4);

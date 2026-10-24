@@ -102,6 +102,8 @@
     </div>
   </section>
 
+  <!-- Mist creeping in at the top of the screen while fog of war is on -->
+  <div id="fogVeil" class="fog-veil"></div>
   <!-- HUD -->
   <div id="hud" class="hidden">
     <div class="board">
@@ -112,7 +114,7 @@
     <div class="chips-right">
       <div class="chip level" id="sLevel">NORMAL</div>
       <div class="chip" id="oppCondition">Opponent: fresh</div>
-      <div class="chip fog-chip hidden" id="fogChip">🌫 FOG</div>
+      <div class="chip fog-chip hidden" id="fogChip"><b>Fog of war</b><span id="fogChipLeft"></span></div>
       <button class="small-btn hidden" id="btnStopWatch">✕ Stop watching</button>
     </div>
     <div class="me-panel">
@@ -138,16 +140,24 @@
     <div id="callout"></div>
     <div id="subcallout"></div>
     <div id="countdown"></div>
+    <div id="fogBanner" class="fog-banner"><b id="fogBannerTitle"></b><span id="fogBannerSub"></span></div>
   </div>
 
-  <!-- Match over: stays on the court until you choose -->
-  <div id="endBar" class="replay-bar end-bar hidden">
-    <span class="end-title" id="endTitle"></span>
-    <span class="end-score" id="endScore"></span>
-    <button class="small-btn" id="btnEndResults">📊 Results</button>
-    <button class="small-btn" id="btnEndReplay">🎬 Replay</button>
-    <button class="small-btn" id="btnEndRematch">↻ Rematch</button>
-    <button class="small-btn" id="btnEndMenu">⌂ Menu</button>
+  <!-- Match over: the final score, front and centre, on the frozen court until you choose -->
+  <div id="endBar" class="end-card hidden" role="dialog" aria-label="Final score">
+    <span class="end-kicker">Final score</span>
+    <h2 class="end-title" id="endTitle"></h2>
+    <div class="end-line">
+      <div class="end-side you" id="endSideYou"><b id="endScoreYou">0</b><span id="endNameYou"></span></div>
+      <span class="end-dash">–</span>
+      <div class="end-side opp" id="endSideOpp"><b id="endScoreOpp">0</b><span id="endNameOpp"></span></div>
+    </div>
+    <div class="end-btns">
+      <button class="small-btn" id="btnEndResults">📊 Results</button>
+      <button class="small-btn" id="btnEndReplay">🎬 Replay</button>
+      <button class="small-btn primary" id="btnEndRematch">↻ Rematch</button>
+      <button class="small-btn" id="btnEndMenu">⌂ Menu</button>
+    </div>
   </div>
 
   <!-- Replay controls: stays until you close it -->
@@ -165,6 +175,7 @@
   <aside id="videoPanel" class="video-panel hidden" aria-label="Video call">
     <div class="vtile opp" id="vTileOpp">
       <video id="vidOpp" autoplay playsinline></video>
+      <img id="vidOppRelay" class="vrelay" alt="" />
       <div class="vph"><b id="vInitOpp">?</b><span id="vNoteOpp">Calling…</span></div>
       <span class="vname"><i class="vmic"></i><em id="vNameOpp">Opponent</em></span>
       <button class="vunmute hidden" id="btnVidUnmute">🔈 Click for sound</button>

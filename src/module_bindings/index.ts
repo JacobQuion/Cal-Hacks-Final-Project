@@ -47,6 +47,7 @@ import PickSecretReducer from "./pick_secret_reducer";
 import QuickMatchReducer from "./quick_match_reducer";
 import RematchReducer from "./rematch_reducer";
 import RtcAckReducer from "./rtc_ack_reducer";
+import RtcSendFrameReducer from "./rtc_send_frame_reducer";
 import RtcSignalReducer from "./rtc_signal_reducer";
 import ServeReducer from "./serve_reducer";
 import SetFogReducer from "./set_fog_reducer";
@@ -68,6 +69,7 @@ import MatchRow from "./match_table";
 import MatchLogRow from "./match_log_table";
 import MatchStatsRow from "./match_stats_table";
 import MyDeviceRow from "./my_device_table";
+import MyFrameRow from "./my_frame_table";
 import MyLoadoutRow from "./my_loadout_table";
 import MyReadRow from "./my_read_table";
 import MyRtcRow from "./my_rtc_table";
@@ -225,6 +227,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyDeviceRow),
+  myFrame: __table({
+    name: 'my_frame',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyFrameRow),
   myLoadout: __table({
     name: 'my_loadout',
     indexes: [
@@ -298,6 +307,7 @@ const reducersSchema = __reducers(
   __reducerSchema("quick_match", QuickMatchReducer),
   __reducerSchema("rematch", RematchReducer),
   __reducerSchema("rtc_ack", RtcAckReducer),
+  __reducerSchema("rtc_send_frame", RtcSendFrameReducer),
   __reducerSchema("rtc_signal", RtcSignalReducer),
   __reducerSchema("serve", ServeReducer),
   __reducerSchema("set_fog", SetFogReducer),

@@ -7,6 +7,11 @@
 // recipient's sid, so leftovers from an old session (a reload, a dropped laptop) are ignored.
 // Both sides always negotiate one audio + one video transceiver; turning the camera or mic on/off later
 // only swaps tracks (replaceTrack), so it never needs another round of signaling.
+//
+// Fallback: with only STUN, a direct connection fails on many venue / campus / phone-hotspot networks.
+// If the call isn't connected a few seconds in, each laptop also relays small JPEG frames of its camera
+// through SpacetimeDB (rtcSendFrame → my_frame view), so you always see the other player's face.
+// The relay carries no audio; it stops by itself as soon as the direct call connects.
 
 const $ = id => document.getElementById(id);
 
@@ -17,14 +22,18 @@ if (import.meta.env.VITE_TURN_URL) {
 const VIDEO = { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24, max: 30 }, facingMode: 'user' };
 const AUDIO = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
 const MAX_VIDEO_BITRATE = 600_000; // keep the call light so it never competes with the game's own traffic
+const RELAY_AFTER_MS = 4000;        // give the direct connection this long before relaying frames
+const RELAY_FPS = 5;
+const RELAY_W = 192, RELAY_H = 144; // 4:3 like the tiles; ~6 KB per JPEG
+const RELAY_STALE_MS = 2500;        // no frame for this long = the relay went quiet
 
 /**
  * send(json) delivers a signaling message to the other laptop; ack(id) deletes mailbox rows up to id.
  * Call sync() whenever the match changes and receive() for every my_rtc row.
  */
-export function createVideoCall({ send, ack }) {
+export function createVideoCall({ send, ack, sendFrame }) {
   const ui = {
-    panel: $('videoPanel'), opp: $('vidOpp'), me: $('vidMe'),
+    panel: $('videoPanel'), opp: $('vidOpp'), me: $('vidMe'), relay: $('vidOppRelay'),
     oppTile: $('vTileOpp'), meTile: $('vTileMe'), oppName: $('vNameOpp'), meName: $('vNameMe'),
     oppNote: $('vNoteOpp'), meNote: $('vNoteMe'), oppInitial: $('vInitOpp'), meInitial: $('vInitMe'),
     mic: $('btnMic'), cam: $('btnCam'), min: $('btnVidMin'), unmute: $('btnVidUnmute'),
@@ -40,6 +49,10 @@ export function createVideoCall({ send, ack }) {
   let mediaError = '';
   let lastId = 0n, ackTimer = 0, chain = Promise.resolve(), restartTimer = 0;
   let meter = null;
+  let since = 0;                      // when the current opponent became known (relay waits RELAY_AFTER_MS)
+  let relayFrameAt = 0, relaySending = false, relayBlank = true;
+  const relayCanvas = document.createElement('canvas');
+  relayCanvas.width = RELAY_W; relayCanvas.height = RELAY_H;
 
   const isCaller = () => session?.seat === 0;
   const msg = (type, extra = {}) => send(JSON.stringify({ type, from: sid, to: remoteSid, ...extra }));
@@ -228,9 +241,12 @@ export function createVideoCall({ send, ack }) {
     if (!session) return;
     const connected = pc?.connectionState === 'connected';
     const oppVideo = connected && remoteState.cam && ui.opp.videoWidth > 0 && remoteStream?.getVideoTracks().some(t => t.readyState === 'live');
+    const relayed = !oppVideo && relayLive();
     ui.oppTile.classList.toggle('live', !!oppVideo);
+    ui.oppTile.classList.toggle('relay', relayed);
     ui.oppTile.classList.toggle('muted', connected && !remoteState.mic);
     ui.oppNote.textContent = !session.oppKey ? 'Waiting for player 2…'
+      : relayed ? ''
       : !pc ? 'Calling…'
       : pc.connectionState === 'failed' ? 'Reconnecting…'
       : pc.connectionState === 'disconnected' ? 'Connection lost — reconnecting…'
@@ -270,6 +286,27 @@ export function createVideoCall({ send, ack }) {
   for (const ev of ['loadeddata', 'resize']) ui.opp.addEventListener(ev, () => render());
   addEventListener('pagehide', () => { if (session && remoteSid) msg('bye'); });
 
+  // Relay loop: send a frame while the direct call isn't up; keep the tile in step when frames stop.
+  let relayShown = false;
+  setInterval(() => {
+    const live = relayLive();
+    if (live !== relayShown) { relayShown = live; render(); }
+    if (!session || !session.oppKey || !sendFrame || relaySending) return;
+    const direct = pc?.connectionState === 'connected';
+    const camOn = want.cam && local.video && ui.me.videoWidth > 0;
+    if (direct || performance.now() - since < RELAY_AFTER_MS) return;
+    if (!camOn) {
+      if (!relayBlank) { relayBlank = true; relaySending = true; Promise.resolve(sendFrame('')).catch(() => {}).finally(() => { relaySending = false; }); }
+      return;
+    }
+    // Cover-crop the camera into the 4:3 canvas (unmirrored, as the direct call would send it).
+    const vw = ui.me.videoWidth, vh = ui.me.videoHeight, k = Math.max(RELAY_W / vw, RELAY_H / vh);
+    const g = relayCanvas.getContext('2d');
+    g.drawImage(ui.me, (RELAY_W - vw * k) / 2, (RELAY_H - vh * k) / 2, vw * k, vh * k);
+    relayBlank = false; relaySending = true;
+    Promise.resolve(sendFrame(relayCanvas.toDataURL('image/jpeg', 0.55))).catch(() => {}).finally(() => { relaySending = false; });
+  }, 1000 / RELAY_FPS);
+
   // ---------- public API ----------
   return {
     /** s: { matchId, seat, oppKey, oppName, myName } while in a 1v1 (oppKey '' until player 2 joins), or null. */
@@ -277,7 +314,7 @@ export function createVideoCall({ send, ack }) {
       if (!s) {
         if (!session) return;
         if (remoteSid) msg('bye');
-        session = null; remoteSid = ''; remoteState = { mic: true, cam: true };
+        session = null; remoteSid = ''; remoteState = { mic: true, cam: true }; relayFrameAt = 0;
         closePc(); stopMedia(); meter?.close(); meter = null;
         ui.panel.classList.add('hidden'); document.body.classList.remove('with-video');
         return;
@@ -291,16 +328,26 @@ export function createVideoCall({ send, ack }) {
       ui.meInitial.textContent = (s.myName || 'Y').trim().charAt(0).toUpperCase();
       if (fresh) {
         sid = Math.random().toString(36).slice(2, 10);
-        remoteSid = '';
+        remoteSid = ''; since = performance.now(); relayFrameAt = 0;
         ui.panel.classList.remove('hidden'); document.body.classList.add('with-video');
         meter = meter || createMeter(ui);
         startMedia();
         if (s.oppKey) msg('hello');
       } else if (oppChanged) {
         remoteSid = ''; remoteState = { mic: true, cam: true }; closePc();
+        since = performance.now(); relayFrameAt = 0;
         if (s.oppKey) msg('hello');
       }
       render();
+    },
+    /** A my_frame row: the latest relayed camera frame from the other laptop. */
+    frame(row) {
+      if (!session || row.matchId !== session.matchId) return;
+      if (!row.data) { relayFrameAt = 0; render(); return; }
+      ui.relay.src = row.data;
+      const was = relayLive();
+      relayFrameAt = performance.now();
+      if (!was) render();
     },
     /** A my_rtc row: process in order, then acknowledge so the server can delete it. */
     receive(row) {
@@ -313,6 +360,8 @@ export function createVideoCall({ send, ack }) {
       scheduleAck();
     },
   };
+
+  function relayLive() { return relayFrameAt > 0 && performance.now() - relayFrameAt < RELAY_STALE_MS; }
 
   function scheduleAck() {
     clearTimeout(ackTimer);

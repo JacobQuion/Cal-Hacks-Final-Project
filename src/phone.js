@@ -25,6 +25,7 @@ const pitchLog = [];         // recent { t, pitch } samples, to see which way a 
 let stage = 'connect';       // connect | motion | center | gentle | hard | play
 let calPeaks = [];
 let tapMode = false;
+let playSince = 0;           // when calibration finished: the follow-through of the last hard swing isn't a swing
 
 function loadCal() { try { return JSON.parse(localStorage.getItem('racket.cal')) || {}; } catch { return {}; } }
 function saveCal() { try { localStorage.setItem('racket.cal', JSON.stringify({ gentle: cal.gentle, hard: cal.hard })); } catch { /* storage unavailable */ } }
@@ -69,6 +70,7 @@ connect({
     conn = c;
     if (!code) { $('connTitle').textContent = 'No match code'; $('connText').textContent = 'Scan the QR code on the laptop screen.'; return; }
     act('pairPhone', { code, seat });
+    sendStatus();   // after a reconnect, tell the server again whether this phone is calibrated
     refresh();
   },
   onStatus(text) { if (text) { setPrompt(text); if (stage === 'connect') $('connTitle').textContent = text; } },
@@ -90,7 +92,8 @@ function refresh() {
     const me = seat === 0 ? m.scoreA : m.scoreB, op = seat === 0 ? m.scoreB : m.scoreA;
     $('pScore').textContent = `${me} – ${op}`;
     const opp = (seat === 0 ? m.nameB : m.nameA) || 'opponent';
-    if (m.status === 'lobby') setPrompt((seat === 0 ? m.readyA : m.readyB) ? `Ready — waiting for ${opp}` : 'Swing to ready up!');
+    if (stage !== 'play' && (m.status === 'lobby' || m.status === 'countdown')) setPrompt('Finish calibrating — the match waits for you');
+    else if (m.status === 'lobby') setPrompt((seat === 0 ? m.readyA : m.readyB) ? `Ready — waiting for ${opp}` : 'Swing to ready up!');
     else if (m.status === 'countdown') setPrompt('Get ready…');
     else if (m.status === 'paused') setPrompt(`Paused — ${m.pausedReason}`);
     else if (m.status === 'over') setPrompt(m.winner === seat ? '🏆 You win! Swing for a rematch' : `${opp} wins — swing for a rematch`);
@@ -228,7 +231,7 @@ function powerFromPeak(peak) {
 
 function emitSwing(peak, lagMs, swingAim, gesture = { dir: 'flat', slice: false }) {
   if (stage === 'gentle' || stage === 'hard') return recordCalibration(peak);
-  if (stage !== 'play') return;
+  if (stage !== 'play' || performance.now() - playSince < 1500) return;
   act('phoneSwing', { power: +powerFromPeak(peak).toFixed(3), aim: +swingAim.toFixed(3), lag: Math.round(lagMs), dir: gesture.dir, slice: !!gesture.slice, tap: false });
   $('pGesture').textContent = gesture.slice ? '↻ twist' : { down: '↓ chop', up: '↑ up', flat: '→ flat' }[gesture.dir];
 }
@@ -258,7 +261,7 @@ function recordCalibration(peak) {
 }
 
 function startPlay() {
-  stage = 'play'; show('s-play');
+  stage = 'play'; show('s-play'); playSince = performance.now();
   $('tapHint').textContent = tapMode ? 'Tap: top = smash · middle = clear · bottom = lift · left/right = aim' : 'Swing your phone — or tap here';
   sendStatus();
   navigator.wakeLock?.request('screen').catch(() => {});
