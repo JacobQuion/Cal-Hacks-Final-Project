@@ -287,8 +287,8 @@ export function makeServe(o: { from: Vec; side: number; power: number; aim: numb
 // ---------- AI ----------
 export const LEVELS = [
   { name: 'EASY',   run: 4.2, react: 0.35, timing: 0.13, smash: 0.1,  aim: 0.55, letOut: 0.3,  drop: 0.25, secret: 0.1 },
-  { name: 'NORMAL', run: 5.0, react: 0.25, timing: 0.09, smash: 0.22, aim: 0.8,  letOut: 0.6,  drop: 0.3,  secret: 0.2 },
-  { name: 'PRO',    run: 5.8, react: 0.16, timing: 0.055, smash: 0.4, aim: 1.0,  letOut: 0.85, drop: 0.35, secret: 0.35 },
+  { name: 'MEDIUM', run: 5.0, react: 0.25, timing: 0.09, smash: 0.22, aim: 0.8,  letOut: 0.6,  drop: 0.3,  secret: 0.2 },
+  { name: 'HARD',   run: 5.8, react: 0.16, timing: 0.055, smash: 0.4, aim: 1.0,  letOut: 0.85, drop: 0.35, secret: 0.35 },
 ];
 
 // Decide how the AI plays an incoming shuttle.
