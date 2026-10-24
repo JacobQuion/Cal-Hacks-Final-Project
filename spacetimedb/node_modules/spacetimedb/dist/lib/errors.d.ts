@@ -1,0 +1,33 @@
+/**
+ * An error thrown by a reducer that indicates a problem to the sender.
+ *
+ * When this error is thrown by a reducer, the sender will be notified
+ * that the reducer failed gracefully with the given message.
+ */
+export declare class SenderError extends Error {
+    constructor(message: string);
+    get name(): string;
+}
+/**
+ * An internal reducer error returned by the server runtime.
+ */
+export declare class InternalError extends Error {
+    constructor(message: string);
+    get name(): string;
+}
+/** The call was not sent because the connection was not established. */
+export declare class DisconnectedError extends Error {
+    constructor(message?: string);
+    get name(): string;
+}
+/** The connection dropped before acknowledgement; the call may have run. */
+export declare class UnknownCallResultError extends Error {
+    constructor(message?: string);
+    get name(): string;
+}
+/** The reconnect returned a different identity, ending automatic reconnection. */
+export declare class IdentityChangedError extends Error {
+    constructor(message?: string);
+    get name(): string;
+}
+//# sourceMappingURL=errors.d.ts.map

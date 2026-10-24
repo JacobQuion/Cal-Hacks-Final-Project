@@ -1,0 +1,56 @@
+import type { AlgebraicType } from './algebraic_type';
+import type { Typespace } from './autogen/types';
+import type { ParamsObj } from './reducers';
+import type { ColumnBuilder, TypeBuilder } from './type_builders';
+import type { CamelCase, SnakeCase } from './type_util';
+export declare function deepEqual(obj1: unknown, obj2: unknown): boolean;
+export declare function uint8ArrayToHexString(array: Uint8Array): string;
+export declare function uint8ArrayToU128(array: Uint8Array): bigint;
+export declare function uint8ArrayToU256(array: Uint8Array): bigint;
+export declare function hexStringToUint8Array(str: string): Uint8Array;
+export declare function hexStringToU128(str: string): bigint;
+export declare function hexStringToU256(str: string): bigint;
+export declare function u128ToUint8Array(data: bigint): Uint8Array;
+export declare function u128ToHexString(data: bigint): string;
+export declare function u256ToUint8Array(data: bigint): Uint8Array;
+export declare function u256ToHexString(data: bigint): string;
+/**
+ * Coerces a value that should be a `bigint` — but may arrive as a `number`
+ * or decimal string after passing through JSON — into a `bigint`.
+ *
+ * Every other type is rejected up front: bare `BigInt()` would silently
+ * accept booleans (`true` → `1n`), arrays (`[42]` → `42n`) and empty
+ * strings (`'' ` → `0n`), turning malformed payloads into valid-looking
+ * ids instead of failing early.
+ *
+ * @param value The value to coerce
+ * @param what Type name used in the error message (e.g. `'ConnectionId'`)
+ */
+export declare function coerceToBigInt(value: unknown, what: string): bigint;
+/**
+ * Converts a string to PascalCase (UpperCamelCase).
+ * @param str The string to convert
+ * @returns The converted string
+ */
+export declare function toPascalCase(s: string): string;
+/**
+ * Type safe conversion from a string like "some_identifier-name" to "someIdentifierName".
+ * @param str The string to convert
+ * @returns The converted string
+ */
+export declare function toCamelCase<T extends string>(s: T): CamelCase<T>;
+/** Type safe conversion from a string like "some_Identifier-name" to "some_identifier_name".
+ * @param str The string to convert
+ * @returns The converted string
+ */
+export declare function toSnakeCase<T extends string>(str: T): SnakeCase<T>;
+export declare function bsatnBaseSize(typespace: Typespace, ty: AlgebraicType): number;
+export type CoerceTypeBuilder<Col extends TypeBuilder<any, any> | ColumnBuilder<any, any, any>> = Col extends ColumnBuilder<any, any> ? Col['typeBuilder'] : Col;
+export type CoerceParams<Params extends ParamsObj> = {
+    [k in keyof Params & string]: CoerceTypeBuilder<Params[k]>;
+};
+export declare function coerceParams<Params extends ParamsObj>(params: Params): CoerceParams<Params>;
+export declare const hasOwn: <K extends PropertyKey>(o: object, k: K) => o is K extends PropertyKey ? {
+    [k in K]: unknown;
+} : never;
+//# sourceMappingURL=util.d.ts.map

@@ -1,0 +1,1 @@
+{"version":3,"file":"accessor_path.d.ts","sourceRoot":"","sources":["../../src/lib/accessor_path.ts"],"names":[],"mappings":"AAIA;;;GAGG;AACH,wBAAgB,YAAY,CAC1B,IAAI,EAAE,MAAM,EACZ,YAAY,EAAE,MAAM,GACnB,CAAC,MAAM,CAAC,MAAM,EAAE,OAAO,CAAC,EAAE,MAAM,CAAC,CAWnC;AAED,8FAA8F;AAC9F,wBAAgB,iBAAiB,CAAC,CAAC,GAAG,OAAO,EAC3C,IAAI,EAAE,MAAM,EACZ,YAAY,EAAE,MAAM,GACnB,CAAC,CAMH"}

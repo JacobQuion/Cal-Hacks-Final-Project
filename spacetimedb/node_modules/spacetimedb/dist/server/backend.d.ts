@@ -1,0 +1,56 @@
+import * as _syscalls2_0 from 'spacetime:sys@2.0';
+import type { u128, u16, u256, u32 } from 'spacetime:sys@2.0';
+export declare const sys: {
+    datastore_clear(table_id: u32): u64;
+    register_hooks(hooks: _syscalls2_0.ModuleHooks): any;
+    table_id_from_name(name: string): u32;
+    index_id_from_name(name: string): u32;
+    datastore_table_row_count(table_id: u32): _syscalls2_0.u64;
+    datastore_table_scan_bsatn(table_id: u32): u32;
+    datastore_index_scan_range_bsatn(index_id: u32, buf: ArrayBuffer, prefix_len: u32, prefix_elems: u16, rstart_len: u32, rend_len: u32): u32;
+    row_iter_bsatn_advance(iter: u32, buffer: ArrayBuffer): u32;
+    row_iter_bsatn_close(iter: u32): void;
+    datastore_insert_bsatn(table_id: u32, row: ArrayBuffer, row_len: u32): u32;
+    datastore_update_bsatn(table_id: u32, index_id: u32, row: ArrayBuffer, row_len: u32): u32;
+    datastore_delete_by_index_scan_range_bsatn(index_id: u32, buf: ArrayBuffer, prefix_len: u32, prefix_elems: u16, rstart_len: u32, rend_len: u32): u32;
+    datastore_delete_all_by_eq_bsatn(table_id: u32, relation: ArrayBuffer, relation_len: u32): u32;
+    volatile_nonatomic_schedule_immediate(reducer_name: string, args: Uint8Array): void;
+    console_log(level: _syscalls2_0.u8, message: string): void;
+    console_timer_start(name: string): u32;
+    console_timer_end(span_id: u32): void;
+    identity(): u256;
+    get_jwt_payload(connection_id: u128): Uint8Array;
+    procedure_http_request(request: Uint8Array, body: Uint8Array | string): [response: Uint8Array, body: Uint8Array];
+    procedure_start_mut_tx(): bigint;
+    procedure_commit_mut_tx(): any;
+    procedure_abort_mut_tx(): any;
+    datastore_index_scan_point_bsatn(index_id: u32, point: ArrayBuffer, point_len: u32): u32;
+    datastore_delete_by_index_scan_point_bsatn(index_id: u32, point: ArrayBuffer, point_len: u32): u32;
+    moduleHooks: typeof _syscalls2_0.moduleHooks;
+};
+export interface DatastoreBackend {
+    identity(): u256;
+    getJwtPayload(connectionId: u128): Uint8Array;
+    tableIdFromName(name: string): u32;
+    indexIdFromName(name: string): u32;
+    datastoreTableRowCount(tableId: u32): u64ish;
+    datastoreTableScanBsatn(tableId: u32): u32;
+    datastoreInsertBsatn(tableId: u32, row: ArrayBuffer, rowLen: number): Uint8Array | number | void;
+    datastoreDeleteAllByEqBsatn(tableId: u32, row: ArrayBuffer, rowLen: number): u32;
+    datastoreIndexScanPointBsatn(indexId: u32, point: ArrayBuffer, pointLen: number): u32;
+    datastoreIndexScanRangeBsatn(indexId: u32, prefix: ArrayBuffer, prefixLen: u32, prefixElems: u16, rstartLen: u32, rendLen: u32): u32;
+    datastoreDeleteByIndexScanPointBsatn(indexId: u32, point: ArrayBuffer, pointLen: number): u32;
+    datastoreDeleteByIndexScanRangeBsatn(indexId: u32, prefix: ArrayBuffer, prefixLen: u32, prefixElems: u16, rstartLen: u32, rendLen: u32): u32;
+    datastoreUpdateBsatn(tableId: u32, indexId: u32, row: ArrayBuffer, rowLen: number): Uint8Array | number | void;
+    datastoreClear(tableId: u32): void;
+    rowIterBsatnAdvance(iterId: u32, out: ArrayBuffer): number;
+    rowIterBsatnClose(iterId: u32): void;
+    procedureStartMutTx(): bigint;
+    procedureCommitMutTx(): void;
+    procedureAbortMutTx(): void;
+    procedureHttpRequest(request: Uint8Array, body: Uint8Array | string): [Uint8Array, Uint8Array];
+}
+type u64ish = number | bigint;
+export declare const hostBackend: DatastoreBackend;
+export {};
+//# sourceMappingURL=backend.d.ts.map
