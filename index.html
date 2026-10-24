@@ -24,20 +24,14 @@
         <label class="field"><span>Your name</span><input id="nameInput" maxlength="16" autocomplete="off" /></label>
         <div class="seg" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
           <button data-level="0">Easy</button>
-          <button data-level="1" class="on">Normal</button>
-          <button data-level="2">Pro</button>
+          <button data-level="1" class="on">Medium</button>
+          <button data-level="2">Hard</button>
         </div>
         <button class="big-btn primary" id="btnAI">🤖 Play vs NPC</button>
       </div>
       <div class="card side-card">
         <h3 class="card-title">2 players · 2 laptops</h3>
         <button class="big-btn pink" id="btnCreate">👥 Create 1v1 match</button>
-        <div class="join-row">
-          <input id="joinInput" maxlength="4" placeholder="CODE" autocomplete="off" aria-label="Match code" />
-          <button class="big-btn" id="btnJoin">Join</button>
-        </div>
-        <button class="big-btn" id="btnQuick">⚡ Quick match</button>
-        <p class="hint" id="queueHint"></p>
       </div>
       <div class="card side-card hof">
         <h3 class="card-title">🔴 Live now</h3>
@@ -46,7 +40,6 @@
         <ol id="hofList"><li class="hint">No matches yet</li></ol>
       </div>
     </div>
-    <p class="hint-keys">Keyboard: Space clear/drive · X smash · C lift · Z drop · ← → aim · 1 2 3 secret moves · Q W E read · S report · P pause</p>
     <p class="conn" id="connStatus"></p>
   </section>
 
@@ -112,7 +105,7 @@
       <div class="side cpu"><b id="sCpu">0</b><label id="lblCpu">NPC</label><i class="serve-dot" id="dotCpu"></i></div>
     </div>
     <div class="chips-right">
-      <div class="chip level" id="sLevel">NORMAL</div>
+      <div class="chip level" id="sLevel">MEDIUM</div>
       <div class="chip" id="oppCondition">Opponent: fresh</div>
       <div class="chip fog-chip hidden" id="fogChip"><b>Fog of war</b><span id="fogChipLeft"></span></div>
       <button class="small-btn hidden" id="btnStopWatch">✕ Stop watching</button>
