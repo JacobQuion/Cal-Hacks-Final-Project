@@ -117,6 +117,9 @@ export type MyLoadout = __Infer<typeof MyLoadout>;
 export const MyRead = __t.object("MyRead", {});
 export type MyRead = __Infer<typeof MyRead>;
 
+export const MyRtc = __t.object("MyRtc", {});
+export type MyRtc = __Infer<typeof MyRtc>;
+
 export const MySecret = __t.object("MySecret", {});
 export type MySecret = __Infer<typeof MySecret>;
 
@@ -187,6 +190,15 @@ export const ReadPick = __t.object("ReadPick", {
   buff: __t.bool(),
 });
 export type ReadPick = __Infer<typeof ReadPick>;
+
+export const RtcMail = __t.object("RtcMail", {
+  id: __t.u64(),
+  to: __t.string(),
+  matchId: __t.u32(),
+  fromSeat: __t.u8(),
+  data: __t.string(),
+});
+export type RtcMail = __Infer<typeof RtcMail>;
 
 export const ScoutLine = __t.object("ScoutLine", {
   label: __t.string(),
