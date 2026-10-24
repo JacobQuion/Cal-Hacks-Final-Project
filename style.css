@@ -260,7 +260,9 @@ body.phone { background: radial-gradient(ellipse at 50% 0%, #1b1440 0%, #0a0b1c 
 .replay-info { color: #b9c4ff; font-weight: 600; font-size: 14px; }
 .replay-shot {
   position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 5; white-space: nowrap;
-  font-weight: 700; font-size: clamp(18px, 2.4vw, 28px); -webkit-text-stroke: 5px #05060d; paint-order: stroke fill;
+  font-weight: 700; font-size: clamp(16px, 2vw, 24px); letter-spacing: .5px;
+  padding: 6px 18px; border-radius: 999px; background: rgba(5, 6, 13, .8); border: 2px solid rgba(198, 255, 0, .5);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, .6); max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis;
 }
 .replay-bar.hidden + .replay-shot { display: none; }
 .replay-shot.go { animation: replayShot .35s ease-out; }
