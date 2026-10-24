@@ -1,8 +1,8 @@
 # Racket Rush
 
 Badminton on your laptop, swung with your phone. Play **1v1 across two laptops** (each player with
-their own phone as a racket) or **against the CPU**. SpacetimeDB is the referee: laptops and phones
-are thin clients, and every shot, landing, point, secret move and CPU decision happens inside the
+their own phone as a racket) or **against the NPC**. SpacetimeDB is the referee: laptops and phones
+are thin clients, and every shot, landing, point, secret move and NPC decision happens inside the
 database.
 
 ```
@@ -24,7 +24,7 @@ This isn't a screen effect. The opponent's shot is never sent to your laptop unt
 - The hitter gets their own shot instantly through the per-player `my_shot` **view**.
 - Everyone else reads the public `shot_feed` table, which in fog is written only by a **scheduled reducer** (`cross`) at the moment the shuttle crosses the net, carrying its position and speed at the net.
 
-In testing, the CPU's fogged shots reached the other laptop at z ≈ 0.0 (the net), 0.57–0.78 s after they
+In testing, the NPC's fogged shots reached the other laptop at z ≈ 0.0 (the net), 0.57–0.78 s after they
 were hit. Opening developer tools on your laptop shows nothing, because the data isn't there yet.
 
 ## How SpacetimeDB is used
@@ -36,12 +36,12 @@ were hit. Opening developer tools on your laptop shows nothing, because the data
 | **Server-decided shots** | `swing` / `serve` reducers + shared `core.ts` physics | The laptop only reports *how far off its timing was + gesture + power + aim*. The server works out the contact point, stamina, secret move, read bonus and launch vector, then writes the `shot` row. Both screens animate the same flight from it. |
 | **Server-checked timing** | `swing` reducer + `ctx.timestamp` | The server knows when it launched the shuttle and when it reaches the contact point. The laptop's timing must agree with the server clock (allowing for network delay), or the swing is graded on server time. A faked "PERFECT" sent 0.8 s early is rejected. |
 | **Landing & scoring without a game loop** | Schedule table (`timer`, one-shot) | At launch the server simulates the flight once and schedules a `land` timer for the touchdown. One write per hit, no 20 Hz tick. Stale timers are ignored by `shotSeq`. |
-| **CPU opponent** | Scheduled reducers | The AI lives in the database: on launch it predicts the contact, decides the shot and schedules `ai_hit` at contact time plus its timing error. It even uses secret moves. |
+| **NPC opponent** | Scheduled reducers | The AI lives in the database: on launch it predicts the contact, decides the shot and schedules `ai_hit` at contact time plus its timing error. It even uses secret moves. |
 | **Secret moves** (Power / Curve / Feint) | Private `secret` table + `my_secret` view | Armed from the phone or keys 1-2-3. Only your own laptop and phone can see it. The opponent's client never receives it. A feint is announced as a clear/drive while the server plays a drop. |
 | **Hidden stamina** | Private `stamina` table, `my_stamina` + `condition` views | You see your exact bar. The opponent only gets "fresh / tired / exhausted". Below 30, you can't swing at full power (no smash). |
 | **Auto-pause on disconnect** | `clientDisconnected` / `clientConnected` lifecycle reducers | A laptop or paired phone drops → match pauses for everyone. It reconnects with the same identity → resumes and replays the point. |
-| **Reads (shot prediction)** | Private `read_pick` table, `my_read` view, `read_event` | While the opponent is about to hit, guess drop / clear / smash on your phone (or Q/W/E). The guess is never sent to them. It is checked against the *real* shot (a feint can't fool a drop read): right = your next swing is graded one step better, wrong = −5 stamina. `read_event` reveals it afterwards. The CPU reads too. |
-| **Secret target zones** | Private `target_zone` table, `my_target` view | Every point, each player gets a hidden bonus zone on the opponent's court, drawn only on their own screen. A winner landing inside it is a 🎯 bullseye: +25 stamina. The CPU aims for its own zone half the time. |
+| **Reads (shot prediction)** | Private `read_pick` table, `my_read` view, `read_event` | While the opponent is about to hit, guess drop / clear / smash on your phone (or Q/W/E). The guess is never sent to them. It is checked against the *real* shot (a feint can't fool a drop read): right = your next swing is graded one step better, wrong = −5 stamina. `read_event` reveals it afterwards. The NPC reads too. |
+| **Secret target zones** | Private `target_zone` table, `my_target` view | Every point, each player gets a hidden bonus zone on the opponent's court, drawn only on their own screen. A winner landing inside it is a 🎯 bullseye: +25 stamina. The NPC aims for its own zone half the time. |
 | **Scouting report** (lobby option) | Private `loadout` + `point_log` tables, `my_loadout` + `scouting_report` views | Tick it in the lobby before the match. During play you get a live, private report on the opponent's weaknesses (errors, shot types that beat them, weaker side, depth), computed from how every point ended. The opponent never learns you chose it. |
 | **Fog of war** (lobby option) | Private `shot`, public `shot_feed`, `my_shot` view, scheduled `cross` reducer | See above: the opponent's shot is withheld from your client until it crosses the net. |
 | **Sealed shot log** | Private `shot_log` + `match_log` view | Your own shots are exact. The opponent's are shown as announced (a feint stays a "CLEAR", secret moves blank) until the match ends, then everything is revealed for replay and stats. This is the view-based access control the SpacetimeDB docs recommend instead of experimental row-level security. |
