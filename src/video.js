@@ -278,6 +278,7 @@ export function createVideoCall({ send, ack, sendFrame }) {
   ui.mic.addEventListener('click', toggleMic);
   ui.min.addEventListener('click', () => {
     const min = ui.panel.classList.toggle('min');
+    document.body.classList.toggle('video-min', min);
     ui.min.textContent = min ? '▢' : '–';
     ui.min.title = min ? 'Show video' : 'Minimize video';
   });

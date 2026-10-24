@@ -362,6 +362,9 @@ function applyMatch(m) {
   if (m.status === 'paused') {
     game.state = 'paused'; game.incoming = null; fx.setTiming(null, null);
     $('pauseReason').textContent = m.pausedReason;
+    // Spectators can't resume someone else's match, only stop watching it.
+    $('btnResume').classList.toggle('hidden', net.spectator);
+    $('btnMenu').textContent = net.spectator ? '✕ Stop watching' : '⌂ Leave match';
     showScreen('pause'); hud.show(true);
     return;
   }
@@ -767,7 +770,7 @@ $('btnCopy').addEventListener('click', () => {
 });
 $('btnLeaveLobby').addEventListener('click', () => { sfx.ui(); if (net.spectator) { net.watchCode = ''; toMenu(); } else act('leaveMatch'); });
 $('btnResume').addEventListener('click', () => { sfx.ui(); act('setPaused', { paused: false }); });
-$('btnMenu').addEventListener('click', () => { sfx.ui(); act('leaveMatch'); });
+$('btnMenu').addEventListener('click', () => { sfx.ui(); stopWatching(); });
 $('btnMenu2').addEventListener('click', () => { sfx.ui(); net.watchCode = ''; act('leaveMatch'); toMenu(); });
 $('btnEndMenu').addEventListener('click', () => { sfx.ui(); stopWatching(); });
 $('btnStopWatch').addEventListener('click', () => { sfx.ui(); stopWatching(); });
