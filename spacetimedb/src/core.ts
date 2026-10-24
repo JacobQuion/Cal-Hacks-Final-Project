@@ -127,14 +127,39 @@ export function solveShot(p0: Vec, target: Vec, speed: number, branch: 'high' | 
   cands.forEach((c, i) => { if (c.dist > cands[peak].dist) peak = i; });
   const pick = (list: typeof cands) => list.filter(c => c.ok).sort((a, b) => Math.abs(a.dist - want) - Math.abs(b.dist - want))[0];
   const low = cands.slice(0, peak + 1), high = cands.slice(peak);
-  const best = (branch === 'high' ? pick(high) || pick(low) : pick(low) || pick(high))
+  let best = (branch === 'high' ? pick(high) || pick(low) : pick(low) || pick(high))
     || cands.slice().sort((a, b) => Math.abs(a.dist - want) - Math.abs(b.dist - want))[0];
-  return { v: best.v, time: best.time, land: best.land, ok: best.ok };
+  // Refine around the chosen pitch in 0.25° steps, so the shuttle lands where it was aimed (not 1.5° off).
+  if (best.ok) {
+    const r0 = Math.atan2(best.v.y, Math.hypot(best.v.x, best.v.z));
+    for (let d = -1.25; d <= 1.25; d += 0.25) {
+      if (d === 0) continue;
+      const r = r0 + d * Math.PI / 180;
+      const v = new V3(dx * Math.cos(r) * speed, Math.sin(r) * speed, dz * Math.cos(r) * speed);
+      const res = simulateLaunch(p0, v);
+      const dist = (res.land.x - p0.x) * dx + (res.land.z - p0.z) * dz;
+      const ok = Math.sign(res.land.z) !== Math.sign(p0.z) && res.netY !== null && res.netY > NET_H + netMargin;
+      if (ok && Math.abs(dist - want) < Math.abs(best.dist - want)) best = { v, dist, ok, time: res.time, land: res.land };
+    }
+  }
+  return { v: best.v, time: best.time, land: best.land, ok: best.ok, err: best.dist - want };
 }
 
-// Same as solveShot, but adds speed (up to ~2×) when nothing clears the net — soft shots from deep court.
+// solveShot that also adapts the pace when the nominal speed can't put the shuttle on target: a drive
+// from mid-court needs less or it sails long, a lift from deep court a little more (capped, so no shot
+// outpaces a smash). Tries paces closest to nominal first and keeps the nearest miss that clears the net.
+// When nothing clears the net it adds speed (up to ~2×) — soft shots from deep court.
+const PACE = [1, 1.1, 0.9, 1.2, 0.8, 0.7, 0.6];
 export function solveShotBoosted(p0: Vec, target: Vec, speed: number, branch: 'high' | 'low', netMargin?: number) {
-  let sol = solveShot(p0, target, speed, branch, netMargin);
+  let best: ReturnType<typeof solveShot> | null = null, sol = solveShot(p0, target, speed, branch, netMargin);
+  for (const f of PACE) {
+    if (f !== 1) sol = solveShot(p0, target, speed * f, branch, netMargin);
+    if (!sol.ok) continue;
+    if (Math.abs(sol.err) <= 0.3) return sol;
+    if (!best || Math.abs(sol.err) < Math.abs(best.err)) best = sol;
+  }
+  if (best) return best;
+  sol = solveShot(p0, target, speed, branch, netMargin);
   for (let i = 0; i < 5 && !sol.ok; i++) {
     speed *= 1.18;
     sol = solveShot(p0, target, speed, branch, netMargin);
