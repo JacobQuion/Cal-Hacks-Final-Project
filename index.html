@@ -19,25 +19,41 @@
       <span class="logo-bottom">RUSH</span>
       <span class="logo-shuttle">🏸</span>
     </div>
-    <div class="menu-row">
-      <div class="card side-card">
+    <div class="menu-grid">
+      <div class="card play-card">
         <label class="field"><span>Your name</span><input id="nameInput" maxlength="16" autocomplete="off" /></label>
-        <div class="seg" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
-          <button data-level="0">Easy</button>
-          <button data-level="1" class="on">Medium</button>
-          <button data-level="2">Hard</button>
+        <div class="modes">
+          <div class="mode">
+            <div class="mode-head">
+              <span class="mode-icon">🤖</span>
+              <div><h3>Solo</h3><p>Rally against an NPC</p></div>
+            </div>
+            <div class="seg" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
+              <button data-level="0">Easy</button>
+              <button data-level="1" class="on">Medium</button>
+              <button data-level="2">Hard</button>
+            </div>
+            <button class="big-btn primary" id="btnAI">Play vs NPC</button>
+          </div>
+          <div class="mode">
+            <div class="mode-head">
+              <span class="mode-icon red">👥</span>
+              <div><h3>1v1</h3><p>2 players · 2 laptops</p></div>
+            </div>
+            <p class="mode-note">Open a room and share the code with a friend.</p>
+            <button class="big-btn pink" id="btnCreate">Create match</button>
+          </div>
         </div>
-        <button class="big-btn primary" id="btnAI">🤖 Play vs NPC</button>
       </div>
-      <div class="card side-card">
-        <h3 class="card-title">2 players · 2 laptops</h3>
-        <button class="big-btn pink" id="btnCreate">👥 Create 1v1 match</button>
-      </div>
-      <div class="card side-card hof">
-        <h3 class="card-title">🔴 Live now</h3>
-        <ul class="live" id="liveList"><li class="hint">No matches being played</li></ul>
-        <h3 class="card-title">🏆 Hall of fame</h3>
-        <ol id="hofList"><li class="hint">No matches yet</li></ol>
+      <div class="card feed-card">
+        <section class="feed">
+          <h3 class="feed-title"><i class="live-dot"></i>Live now</h3>
+          <ul class="live" id="liveList"><li class="hint">No matches being played</li></ul>
+        </section>
+        <section class="feed">
+          <h3 class="feed-title">🏆 Hall of fame</h3>
+          <ol class="hof-list" id="hofList"><li class="hint">No matches yet</li></ol>
+        </section>
       </div>
     </div>
     <p class="conn" id="connStatus"></p>
