@@ -274,6 +274,21 @@ const noticeEvent = table(
   { matchId: t.u32(), text: t.string() }
 );
 
+// Video call signaling between the two laptops of a 1v1 (WebRTC offers, answers, ICE candidates).
+// PRIVATE mailbox: each row is addressed to one laptop and reaches it only through the my_rtc view,
+// so nobody else (spectators included) ever sees the other player's network addresses. The media
+// itself flows peer to peer and never touches the database. Rows are deleted once acknowledged.
+const rtcMail = table(
+  { name: 'rtc_mail' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    to: t.string().index('btree'),   // recipient laptop identity hex
+    matchId: t.u32(),
+    fromSeat: t.u8(),
+    data: t.string(),                // JSON: { from, to, type, ... }
+  }
+);
+
 // ───────────────────────── schedule table ─────────────────────────
 
 // One-shot timers: start, serve_ready, land, ai_hit, ai_serve, idle_serve
@@ -293,7 +308,7 @@ const spacetimedb = schema({
   device, match, shotFeed, hallOfFame, queue,
   shot, shotLog, secret, stamina, readPick, targetZone, pointLog, loadout,
   swingEvent, aimEvent, hitEvent, rallyEvent, readEvent, noticeEvent,
-  timer,
+  rtcMail, timer,
 });
 export default spacetimedb;
 
@@ -422,6 +437,7 @@ function blankMatch(ctx: Ctx, mode: string, level: number): MatchRow {
 /** Leaving mid-match forfeits it; a waiting lobby is simply closed. */
 function leaveCurrent(ctx: Ctx) {
   ctx.db.queue.identity.delete(ctx.sender);
+  for (const r of [...ctx.db.rtcMail.to.filter(hex(ctx))]) ctx.db.rtcMail.id.delete(r.id);
   const d = ctx.db.device.identity.find(ctx.sender);
   if (!d || d.matchId === 0) return;
   const m = ctx.db.match.id.find(d.matchId);
@@ -839,6 +855,21 @@ export const phoneAim = spacetimedb.reducer({ aim: t.f32(), pitch: t.f32() }, (c
   ctx.db.aimEvent.insert({ matchId: d.matchId, seat: d.seat, aim, pitch });
 });
 
+/** Video call: pass a WebRTC signaling message to the other laptop of this 1v1. */
+export const rtcSignal = spacetimedb.reducer({ data: t.string() }, (ctx, { data }) => {
+  const { m, seat } = myLaptopSeat(ctx);
+  if (m.mode !== 'pvp') throw new SenderError('Video is for 1v1 matches');
+  const to = seatLaptop(m, other(seat));
+  if (!to || to === 'AI') return;
+  if (data.length > 16_000) throw new SenderError('Signal too large');
+  ctx.db.rtcMail.insert({ id: 0n, to, matchId: m.id, fromSeat: seat, data });
+});
+
+/** Video call: delete the signaling messages this laptop has read (everything up to `upTo`). */
+export const rtcAck = spacetimedb.reducer({ upTo: t.u64() }, (ctx, { upTo }) => {
+  for (const r of [...ctx.db.rtcMail.to.filter(hex(ctx))]) if (r.id <= upTo) ctx.db.rtcMail.id.delete(r.id);
+});
+
 /** Arm a secret move (phone or laptop). Each one works once per match; the opponent never sees it. */
 export const pickSecret = spacetimedb.reducer({ move: t.string() }, (ctx, { move }) => {
   const { m, seat } = myAnySeat(ctx);
@@ -1065,6 +1096,11 @@ export const myShot = spacetimedb.view({ name: 'my_shot', public: true }, shot.r
   if (!d || d.matchId === 0 || d.seat === NONE) return undefined;
   const s = ctx.db.shot.matchId.find(d.matchId);
   return s && s.hitter === d.seat ? s : undefined;
+});
+
+/** Video call signaling addressed to you — nobody else can read it. */
+export const myRtc = spacetimedb.view({ name: 'my_rtc', public: true }, t.array(rtcMail.rowType), ctx => {
+  return [...ctx.db.rtcMail.to.filter(ctx.sender.toHexString())];
 });
 
 /** Your lobby choices (scouting), hidden from the opponent. */
