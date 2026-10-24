@@ -12,7 +12,7 @@ accelerometer) detect the swing. Art style: stylized "Nintendo Switch Sports".
  ┌──────────── Laptop browser ─────────────┐         ┌──────── Phone browser ────────┐
  │ index.html — 3D game (Three.js)          │         │ phone.html — controller       │
  │  • shows QR + room code                  │  QR →   │  • motion permission (iOS)    │
- │  • physics, CPU, scoring, rendering      │         │  • calibration wizard         │
+ │  • physics, NPC, scoring, rendering      │         │  • calibration wizard         │
  │  • receives swings / orientation         │         │  • swing detection (gyro+acc) │
  └───────────────▲──────────────────────────┘         └──────────────┬────────────────┘
                  │ WebSocket  { swing, orient, calib }                │ WebSocket
@@ -50,7 +50,7 @@ accelerometer) detect the swing. Art style: stylized "Nintendo Switch Sports".
   Serve = swing when prompted (gentle = short serve, harder = long serve).
   Shuttle lands **in** on your side → you lose the rally; lands **out** / hits the net → the hitter loses.
   Smart play: don't swing at shots that are going out!
-- **CPU opponent:** same auto-move + shot system. Difficulty sets reaction speed, run speed,
+- **NPC opponent:** same auto-move + shot system. Difficulty sets reaction speed, run speed,
   smash frequency, aim width and error rate. It also lets "out" shots go.
 
 ---
@@ -86,7 +86,7 @@ device rate (60–100 Hz). Rising edge above trigger → start; track the peak f
 - Contact prediction: simulate forward to find where the shuttle descends through the ideal hitting
   height on your side → that's where you auto-run and when the timing ring closes.
 
-Court: 13.4 m × 5.18 m (singles), net 1.55 m. Player near side (+Z), CPU far side (−Z).
+Court: 13.4 m × 5.18 m (singles), net 1.55 m. Player near side (+Z), NPC far side (−Z).
 
 ---
 
@@ -106,8 +106,8 @@ racket-rush/
         ├── net.js        ← laptop WebSocket client (room, phone status, messages)
         ├── scene.js      ← park arena, court, net, characters, rackets, shuttle, post-FX
         ├── physics.js    ← shuttle drag integrator, net/ground, shot solver, contact prediction
-        ├── shots.js      ← shot selection from height/power/timing/aim (player + CPU)
-        ├── ai.js         ← CPU decision making + difficulty
+        ├── shots.js      ← shot selection from height/power/timing/aim (player + NPC)
+        ├── ai.js         ← NPC decision making + difficulty
         ├── fx.js         ← trail, timing ring, landing marker, aim marker, sparks, shake
         ├── audio.js      ← synthesized SFX
         ├── hud.js        ← scoreboard, callouts, phone status, toasts
@@ -123,7 +123,7 @@ racket-rush/
 3. [x] Phone page: connect, permission, calibration, swing detection, play screen, fallbacks
 4. [x] Scene: arena, court, net, characters, shuttle, lighting, post-FX
 5. [x] Physics + shot solver + contact prediction
-6. [x] Game loop: serve/rally/score, auto-move, timing ring, CPU, callouts, sound
+6. [x] Game loop: serve/rally/score, auto-move, timing ring, NPC, callouts, sound
 7. [x] Keyboard fallback on laptop (Space / Shift+Space / Z, ← → aim) for testing without a phone
 8. [~] Test end-to-end: simulated phone ✅ (calibration, swing detection, relay, scoring); real phone ⏳
 9. [ ] Deploy (Render/Railway/Fly — needs WebSockets) with `PUBLIC_URL` so the QR points online
