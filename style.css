@@ -210,10 +210,6 @@ body.phone { background: radial-gradient(ellipse at 50% 0%, #1b1440 0%, #0a0b1c 
 .join-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .join-row input { text-transform: uppercase; letter-spacing: 4px; text-align: center; }
 .join-row .big-btn { width: auto; }
-.hof { max-height: 320px; overflow: auto; justify-content: flex-start; }
-.hof ol { padding-left: 20px; display: grid; gap: 6px; font-size: 14px; }
-.hof li span { font-weight: 700; }
-.hof li i { color: var(--pink); font-style: normal; font-weight: 600; }
 .conn { font-size: 13px; font-weight: 600; color: #8f9bd6; }
 .players { display: grid; gap: 6px; }
 .pl { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: 12px; background: #eef3ff; font-weight: 600; }
@@ -316,10 +312,6 @@ body.arena .end-btns .small-btn.primary { background: linear-gradient(180deg, #f
 .scout-head span { color: #8f9bd6; font-size: 12px; flex: 1; }
 .scout-head button { background: none; border: 0; color: #fff; font-size: 16px; cursor: pointer; }
 .scout-line b { display: block; color: #ffd23f; }
-.live { list-style: none; display: grid; gap: 6px; font-size: 14px; margin-bottom: 10px; }
-.live li { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
-.live li span { font-weight: 600; }
-.live li .small-btn { padding: 4px 10px; font-size: 13px; }
 
 /* Lobby options + fog */
 .opt { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); text-align: left; cursor: pointer; }
@@ -483,7 +475,6 @@ body.arena .pl.ready { background: rgba(59, 209, 111, .16); border-color: rgba(5
 body.arena .status { background: rgba(255, 255, 255, .08); color: #eef2ff; }
 body.arena .status i { border: 0; }
 body.arena .qr { border: 0; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .4); }
-body.arena .hof li i { color: #ff6b87; }
 body.arena .conn { color: #6f7ca8; }
 body.arena .hint-keys { color: rgba(238, 242, 255, .7); -webkit-text-stroke: 0; font-weight: 500; text-shadow: 0 1px 8px rgba(0, 0, 0, .8); }
 
@@ -554,3 +545,66 @@ body.arena .secrets button, body.arena .scout-btn { font-family: "Barlow Condens
 body.arena .replay-bar, body.arena .replay-shot, body.arena .scout-panel { font-family: "Barlow", sans-serif; backdrop-filter: blur(12px); border-width: 1px; border-radius: 12px; }
 body.arena .replay-tag { font-family: "Barlow Condensed", sans-serif; font-style: italic; letter-spacing: 1px; }
 body.arena .video-panel, body.arena .vname { font-family: "Barlow", sans-serif; }
+
+/* ---------- Title menu: play card (name + two modes) beside a live / hall-of-fame feed ---------- */
+body.arena #menu { gap: 28px; }
+body.arena #menu .logo-top { font-size: clamp(36px, 5.2vw, 68px); }
+body.arena #menu .logo-bottom { font-size: clamp(52px, 8vw, 108px); }
+body.arena #menu .logo-shuttle { font-size: 40px; right: -34px; top: -10px; }
+.menu-grid {
+  display: grid; grid-template-columns: minmax(0, 600px) minmax(0, 380px); gap: 18px;
+  width: min(998px, 100%); align-items: stretch;
+}
+.play-card { display: flex; flex-direction: column; gap: 18px; padding: 22px; }
+.play-card .field input { width: 100%; }
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; }
+.mode {
+  display: flex; flex-direction: column; gap: 14px; padding: 16px; border-radius: 12px;
+  background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08);
+}
+.mode-head { display: flex; align-items: center; gap: 12px; }
+.mode-icon {
+  width: 44px; height: 44px; flex: none; border-radius: 10px; display: grid; place-items: center; font-size: 22px;
+  background: rgba(255, 198, 26, .14); box-shadow: inset 0 0 0 1px rgba(255, 198, 26, .3);
+}
+.mode-icon.red { background: rgba(232, 48, 79, .16); box-shadow: inset 0 0 0 1px rgba(232, 48, 79, .35); }
+.mode-head h3 { font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 22px; letter-spacing: 1px; text-transform: uppercase; line-height: 1.1; color: #fff; }
+.mode-head p { font-size: 14px; color: #9aa6cc; }
+.mode-note { font-size: 14px; line-height: 1.4; color: #9aa6cc; flex: 1; display: flex; align-items: center; }
+.mode .big-btn { margin-top: auto; font-size: 19px; padding: 13px 16px; }
+
+.feed-card { display: flex; flex-direction: column; gap: 18px; padding: 22px; max-height: min(400px, 52vh); min-height: 0; }
+.feed { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.feed:last-child { flex: 1; }
+.feed-title {
+  display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, .1);
+  font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 16px; letter-spacing: 1.6px; text-transform: uppercase; color: #fff;
+}
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff4a4a; box-shadow: 0 0 8px #ff4a4a; animation: blink 1.4s infinite; }
+.live, .hof-list { list-style: none; display: grid; gap: 6px; font-size: 14px; overflow-y: auto; min-height: 0; }
+.live { max-height: 116px; }
+.live li, .hof-list li:not(.hint) {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; background: rgba(255, 255, 255, .04);
+}
+.live .hint, .hof-list .hint { padding: 6px 0; text-align: left; }
+.who { flex: 1; min-width: 0; display: flex; flex-direction: column; color: #c9d2f2; line-height: 1.3; }
+.who em { font-style: normal; color: #6f7ca8; }
+.who b { color: #fff; }
+.who i { font-style: normal; font-size: 12px; font-weight: 600; color: #ff6b87; }
+.live .who { flex-direction: row; gap: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: block; }
+.score { font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 18px; color: #ffc61a; font-variant-numeric: tabular-nums; }
+.live li .small-btn { padding: 4px 10px; font-size: 13px; }
+.hof-list { counter-reset: hof; }
+.hof-list li:not(.hint)::before {
+  counter-increment: hof; content: counter(hof); flex: none; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+  font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 13px; color: #9aa6cc; background: rgba(255, 255, 255, .08);
+}
+.hof-list li:first-child:not(.hint)::before { background: var(--gold); color: #1a1405; }
+@media (max-width: 900px) {
+  .menu-grid { grid-template-columns: minmax(0, 600px); justify-content: center; }
+  .feed-card { max-height: none; }
+  #menu { justify-content: flex-start; overflow-y: auto; }
+}
+@media (max-width: 520px) {
+  .modes { grid-template-columns: 1fr; }
+}
