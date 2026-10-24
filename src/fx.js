@@ -52,7 +52,7 @@ export class FX {
     this.out = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshBasicMaterial({ map: crossTex(), transparent: true, depthWrite: false, opacity: 0 }));
     this.out.rotation.x = -Math.PI / 2; scene.add(this.out);
 
-    // Aim marker on the CPU's court
+    // Aim marker on the NPC's court
     this.aim = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: ringTex('#ff4f8b'), transparent: true, depthWrite: false, opacity: 0.0 }));
     this.aim.rotation.x = -Math.PI / 2; this.aim.position.set(0, 0.01, -4.6); scene.add(this.aim);
     this.aimX = 0;
