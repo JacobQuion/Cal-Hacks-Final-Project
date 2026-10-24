@@ -1,6 +1,5 @@
 :root {
-  --video-w: clamp(190px, 19vw, 290px);
-  --stage-w: clamp(220px, 26vw, 400px);
+  --video-w: clamp(150px, 13vw, 210px);
   --ink: #1d2340;
   --white: #ffffff;
   --yellow: #ffd23f;
@@ -426,21 +425,6 @@ body.arena .end-btns .small-btn.primary { background: linear-gradient(180deg, #f
 /* Keep menus and overlays clear of the panel while a call is up. */
 body.with-video .screen { padding-right: calc(var(--video-w) + 40px); }
 body.with-video #callout, body.with-video #subcallout { right: calc(var(--video-w) + 44px); }
-/* Lobby: the call sits centred above the lobby cards, tiles side by side. */
-@media (min-width: 761px) {
-  body.video-stage .video-panel {
-    top: 16px; left: 50%; right: auto; transform: translateX(-50%);
-    width: auto; display: grid; grid-template-columns: repeat(2, var(--stage-w)); gap: 8px;
-    animation: stageIn .4s var(--spring) both;
-  }
-  body.video-stage .video-panel.min { grid-template-columns: auto; }
-  body.video-stage .vtile { width: 100%; height: calc(var(--stage-w) * .75); }
-  body.video-stage .vctl { grid-column: 1 / -1; }
-  body.video-stage .screen { padding-right: 16px; }
-  body.video-stage #lobby { padding-top: calc(var(--stage-w) * .75 + 84px); justify-content: safe center; overflow-y: auto; }
-  body.video-stage.video-min #lobby { padding-top: 16px; }
-}
-@keyframes stageIn { from { opacity: 0; transform: translateX(-50%) translateY(-12px); } to { opacity: 1; transform: translateX(-50%); } }
 @media (max-width: 760px) {
   .video-panel { width: 132px; top: auto; bottom: 150px; transform: none; }
   body.with-video .screen { padding-right: 16px; }
@@ -589,6 +573,8 @@ body.arena #levelSeg button.on[data-level="2"] { background: var(--red); color: 
   display: flex; align-items: center; justify-content: center; border-radius: 14px; background: var(--surface);
   font-size: 15px; font-weight: 800; color: var(--sub);
 }
+button.mode-note { width: 100%; border: 0; font-family: inherit; cursor: pointer; transition: color .15s, background .15s; }
+button.mode-note:hover { color: var(--ink); }
 .mode .big-btn { margin-top: auto; font-size: 19px; padding: 14px 16px; }
 .play-tip { text-align: center; font-size: 14px; font-weight: 700; color: var(--sub); }
 
