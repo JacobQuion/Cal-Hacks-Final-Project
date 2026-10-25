@@ -690,11 +690,16 @@ body.bowl .side-card .field input { width: 100%; }
 /* Lobby cards (all games): hug their content instead of filling the screen. */
 body.arena #lobby .menu-row { align-items: stretch; }
 body.arena #lobby .card { padding: 16px; }
-body.arena #lobby .side-card { justify-content: flex-start; }
+body.arena #lobby .side-card { justify-content: center; gap: 12px; }
+/* Mode and NPC level are picked on the home menu, so the lobby skips join codes, mode switches and the level picker. */
+#lobby #joinRow, #lobby #btnVersus, #lobby #btnSolo, #lobby #levelSeg { display: none !important; }
 body.arena #lobby .side-card .field > span { display: none; }
 body.arena #lobby .side-card .field input { padding: 8px 12px; font-size: 16px; }
 body.arena #lobby .side-card .seg button { padding: 7px 0; }
-body.arena #lobby .back-link { padding: 5px 12px; font-size: 13px; }
+body.arena #lobby .back-link, body.arena #lobby #btnLeaveLobby {
+  align-self: stretch; padding: 12px 16px; font-size: 17px; text-align: center;
+}
+#lobby #modeBanner { display: none !important; }
 body.arena #lobby .pair-card { gap: 18px; }
 body.arena #lobby .qr { width: 180px; height: 180px; }
 body.arena #lobby .pair-steps h3 { font-size: 20px; }
