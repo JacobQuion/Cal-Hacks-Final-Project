@@ -6,7 +6,7 @@
   <title>Rally Bowling</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,600;0,700;0,800;0,900;1,900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,600;0,700;0,800;0,900;1,900&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body class="arena bowl">
@@ -21,7 +21,7 @@
     </div>
     <div class="menu-row">
       <div class="card pair-card">
-        <div class="qr" id="qr"><span class="hint">Loading…</span></div>
+        <div class="qr" id="qr"><span class="qr-wait"><i class="spinner"></i>Setting up…</span></div>
         <div class="pair-steps">
           <h3>Your phone is the ball</h3>
           <ol>
@@ -34,14 +34,15 @@
         </div>
       </div>
       <div class="card side-card">
+        <div class="mode-banner" id="modeBanner"></div>
         <div class="room-code"><span id="codeLabel">Lane</span> <b id="laneCode">····</b><button class="small-btn hidden" id="btnCopy">🔗 Copy invite</button></div>
         <label class="field"><span>Bowler</span><input id="nameInput" maxlength="16" autocomplete="off" /></label>
         <div class="players hidden" id="vsPlayers"></div>
         <button class="big-btn primary" id="btnStart">▶ Start bowling</button>
         <button class="small-btn hidden" id="btnNewGame">↻ New game</button>
-        <button class="small-btn" id="btnVersus">⚔️ Bowl against a friend (1v1)</button>
+        <button class="small-btn" id="btnVersus">👥 Switch to doubles (1v1 vs a friend)</button>
         <div class="join-row" id="joinRow"><input id="joinInput" maxlength="4" placeholder="CODE" autocomplete="off" aria-label="Match code" /><button class="small-btn" id="btnJoin">Join</button></div>
-        <button class="small-btn hidden" id="btnSolo">🎳 Bowl solo instead</button>
+        <button class="small-btn hidden" id="btnSolo">🎳 Switch to solo</button>
         <a class="small-btn back-link" href="/">⌂ Back to main menu</a>
       </div>
       <div class="card best-card" id="bestCard">
