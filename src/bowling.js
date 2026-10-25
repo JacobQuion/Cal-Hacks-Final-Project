@@ -5,13 +5,17 @@ import {
   createLane, launch, stepLane, settled, knockedMask, standingMask, isSplit, previewPath, speedOf,
   PIN_SPOTS, HEAD_Z, RELEASE_Z, BALL_R,
 } from './bowl-physics.js';
-import { FULL_RACK, bowlState, frameMarks, callRoll, pinCount } from '../spacetimedb/src/bowling.ts';
+import { FULL_RACK, bowlState, frameMarks, callRoll, pinCount, laneKey } from '../spacetimedb/src/bowling.ts';
 import { initAudio, sfx } from './audio.js';
 import { connect, call, tables } from './stdb.js';
+import { createVideoCall } from './video.js';
 
 // Bowling: the phone is the ball. Its swings and tilt arrive through SpacetimeDB (bowl_input), the
 // lane physics runs here, and the database checks each ball against the rack it holds and keeps
 // score (bowl_game), so the laptop and the phone show the same scorecard.
+// 1v1 (mode = bowlvs): both players bowl their own game at the same time, the higher total wins.
+// The opponent's scorecard sits under yours, their rolls replay on the lane next door, and the two
+// laptops are on a video call, as in badminton.
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -27,9 +31,14 @@ let lane = createLane(FULL_RACK);
 // Neighbouring lanes bowl now and then, so the alley feels alive.
 const neighbours = world.lanes.filter(l => l.k !== 0).map((view, i) => ({ view, lane: createLane(FULL_RACK), wait: 3 + i * 2.7, done: 0 }));
 for (const n of neighbours) n.lane.ball.gone = true;
+// 1v1: the lane to the right is the opponent's.
+const oppLane = neighbours.find(n => n.view.k === 1);
 
-const net = { conn: null, matchId: 0, code: '', phoneConnected: false, phoneReady: false, tapMode: false };
+const params = new URLSearchParams(location.search);
+const net = { conn: null, matchId: 0, code: '', seat: 0, vs: false, joining: false, phoneConnected: false, phoneReady: false, tapMode: false };
 let G = null;              // this lane's bowl_game row
+let O = null;              // 1v1: the opponent's lane
+let M = null;              // the match row
 const game = {
   state: 'lobby',          // lobby | aim | rolling | count | sweep | over
   aim: 0, spin: 0,         // targets from the phone
@@ -46,24 +55,38 @@ const say = (msg, ms = 2400) => {
 const act = (name, args = {}) => call(net.conn, name, args, say);
 
 connect({
-  subs: [tables.match, tables.device, tables.myDevice, tables.bowlGame, tables.bowlScore, tables.bowlInput, tables.noticeEvent],
+  subs: [tables.match, tables.device, tables.myDevice, tables.bowlGame, tables.bowlScore, tables.bowlInput, tables.noticeEvent, tables.myRtc, tables.myFrame],
   wire(conn) {
     net.conn = conn;
     for (const t of ['match', 'device', 'myDevice', 'bowlScore']) {
       conn.db[t].onInsert(queueRefresh); conn.db[t].onDelete(queueRefresh); conn.db[t].onUpdate?.(queueRefresh);
     }
     conn.db.bowlGame.onInsert(queueRefresh);
-    conn.db.bowlGame.onUpdate?.((_c, _o, row) => { if (row.matchId === net.matchId) { G = row; onGame(); } queueRefresh(); });
-    conn.db.bowlInput.onInsert((_c, e) => { if (e.matchId === net.matchId) onPhone(e); });
+    conn.db.bowlGame.onUpdate?.((_c, o, row) => {
+      if (net.matchId && row.matchId === laneKey(net.matchId, net.seat)) { G = row; onGame(); }
+      else if (net.vs && row.matchId === laneKey(net.matchId, 1 - net.seat)) { O = row; onOppGame(o, row); }
+      queueRefresh();
+    });
+    conn.db.bowlInput.onInsert((_c, e) => {
+      if (e.matchId !== net.matchId) return;
+      if (e.seat === net.seat) onPhone(e); else if (net.vs && e.kind === 'roll') oppRoll(e);
+    });
     conn.db.noticeEvent.onInsert((_c, e) => { if (e.matchId === net.matchId) say(e.text); });
+    conn.db.myRtc.onInsert((_c, row) => video.receive(row));
+    conn.db.myFrame.onInsert((_c, row) => video.frame(row));
+    conn.db.myFrame.onUpdate?.((_c, _o, row) => video.frame(row));
   },
   onReady(conn) {
     net.conn = conn;
     act('setName', { name: nameNow() });
-    // Same tab, same identity: a reload keeps the lane (and the paired phone).
+    // Same tab, same identity: a reload keeps the lane (and the paired phone), or the 1v1 we're in.
     const d = first(conn.db.myDevice.iter());
     const m = d && d.matchId ? [...conn.db.match.iter()].find(x => x.id === d.matchId) : null;
-    if (!(m && m.mode === 'bowl' && m.status === 'lobby')) act('startBowling', { name: nameNow() });
+    const join = (params.get('join') || '').toUpperCase();
+    if (join) {
+      params.delete('join'); history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
+      joinCode(join, !(m && (m.mode === 'bowl' || m.mode === 'bowlvs')));
+    } else if (!(m && ((m.mode === 'bowl' && m.status === 'lobby') || m.mode === 'bowlvs'))) startSolo();
     refresh();
   },
   onStatus(text) { $('connStatus').textContent = text || '● Connected to SpacetimeDB'; },
@@ -77,17 +100,126 @@ function refresh() {
   if (!conn) return;
   const d = first(conn.db.myDevice.iter());
   const m = d && d.matchId ? [...conn.db.match.iter()].find(x => x.id === d.matchId) : null;
-  const ours = m && m.mode === 'bowl' ? m : null;
+  // Joined a code that turned out to be another sport: that page runs it (same tab, same identity).
+  if (net.joining && m && m.mode !== 'bowl' && m.mode !== 'bowlvs') { location.replace(m.mode === 'pongvs' ? '/pingpong.html' : '/'); return; }
+  const ours = m && (m.mode === 'bowl' || m.mode === 'bowlvs') ? m : null;
+  if (ours?.mode === 'bowlvs') net.joining = false;
+  M = ours;
+  net.vs = ours?.mode === 'bowlvs';
+  net.seat = ours && d.seat !== 255 ? d.seat : 0;
   net.matchId = ours ? ours.id : 0;
   net.code = ours ? ours.code : '';
-  G = ours ? conn.db.bowlGame.matchId.find(ours.id) ?? null : null;
-  const ph = ours && [...conn.db.device.iter()].find(x => x.kind === 'phone' && x.matchId === ours.id && x.seat === 0);
+  G = ours ? conn.db.bowlGame.matchId.find(laneKey(ours.id, net.seat)) ?? null : null;
+  O = net.vs ? conn.db.bowlGame.matchId.find(laneKey(ours.id, 1 - net.seat)) ?? null : null;
+  const ph = ours && [...conn.db.device.iter()].find(x => x.kind === 'phone' && x.matchId === ours.id && x.seat === net.seat);
   net.phoneConnected = !!(ph && ph.online);
   net.phoneReady = !!(ph && ph.online && ph.ready);
   net.tapMode = !!(ph && ph.tapMode);
+  document.body.classList.toggle('vs', net.vs);
   renderLobby();
   renderBest();
   renderCard();
+  applyVersus();
+  syncVideo();
+}
+
+const startSolo = () => act('startBowling', { name: nameNow() });
+/** Join a 1v1 by code; `fallback` opens a solo lane if that fails and we have nothing else. */
+function joinCode(code, fallback) {
+  code = code.trim().toUpperCase();
+  if (!code) return;
+  net.joining = true;
+  call(net.conn, 'joinMatch', { code, name: nameNow() }, e => { net.joining = false; say(e); if (fallback) startSolo(); });
+}
+const myName = () => (net.vs && M ? (net.seat === 0 ? M.nameA : M.nameB) : G?.name) || nameNow();
+const oppName = () => (M && (net.seat === 0 ? M.nameB : M.nameA)) || 'Player 2';
+const myReady = () => !!M && (net.seat === 0 ? M.readyA : M.readyB);
+
+// Face-to-face video for 1v1s, exactly as in badminton: signaling through SpacetimeDB, media peer to peer.
+const video = createVideoCall({
+  send: data => call(net.conn, 'rtcSignal', { data }, e => console.warn('video signal:', e)),
+  ack: upTo => call(net.conn, 'rtcAck', { upTo }, () => {}),
+  sendFrame: data => net.conn?.reducers.rtcSendFrame({ data }),
+});
+function syncVideo() {
+  if (!net.vs || !M) { video.sync(null); return; }
+  const opp = net.seat === 0 ? M.laptopB : M.laptopA;
+  video.sync({ matchId: M.id, seat: net.seat, oppKey: opp || '', oppName: opp ? oppName() : '', myName: myName() });
+  dockVideo(game.state === 'lobby');
+}
+// In the lobby the call is a card in the row; while bowling it floats on the right.
+function dockVideo(dock) {
+  const panel = $('videoPanel'), home = dock ? $('lobby').querySelector('.menu-row') : document.body;
+  if (panel.parentNode === home) return;
+  home.appendChild(panel);
+  panel.classList.toggle('docked', dock);
+  for (const v of panel.querySelectorAll('video')) if (v.srcObject) v.play().catch(() => {});
+}
+
+// 1v1: the match row drives the screens (lobby → countdown → playing ⇄ paused → over).
+let vsStatus = '';
+function applyVersus() {
+  const st = net.vs && M ? M.status : '';
+  $('pause').classList.toggle('show', st === 'paused');
+  if (st === 'paused') $('pauseReason').textContent = M.pausedReason;
+  if (st === vsStatus) return;
+  const prev = vsStatus;
+  vsStatus = st;
+  if (!st) return;
+  if (st === 'lobby') { if (game.state !== 'lobby') toLobby(); }
+  else if (st === 'countdown') startCountdown();
+  else if (st === 'playing') {
+    // From the countdown (or a reload): a fresh rack. Back from a pause: carry on where we were.
+    if (prev !== 'paused' || game.state === 'lobby') {
+      const st2 = G ? bowlState(G.rolls) : null;
+      showHud();
+      if (st2?.done) showEnd(st2); else enterAim(G ? G.standing : FULL_RACK, true);
+    }
+  } else if (st === 'over') {
+    showHud();
+    if (game.state !== 'rolling' && game.state !== 'count' && game.state !== 'sweep') showEnd(bowlState(G?.rolls ?? []));
+  }
+}
+
+let countdownTimer = 0;
+function startCountdown() {
+  initAudioSafe();
+  showHud();
+  enterAim(FULL_RACK, true);
+  game.state = 'countdown';
+  world.guide.group.visible = false;
+  let n = 3;
+  clearTimeout(countdownTimer);
+  const tick = () => {
+    if (game.state !== 'countdown') return;
+    callout(n > 0 ? String(n) : 'BOWL!', n > 0 ? '#ffffff' : '#ffc61a', n === 3 ? `vs ${oppName()}` : '');
+    sfx.ui();
+    if (n-- > 0) countdownTimer = setTimeout(tick, 1000);
+  };
+  tick();
+}
+function showHud() {
+  $('lobby').classList.remove('show');
+  $('hud').classList.remove('hidden');
+  $('endCard').classList.add('hidden');
+  if (net.vs) dockVideo(false);
+}
+
+// ---------- 1v1: the opponent's lane ----------
+/** Their ball, replayed on the lane next door against the rack they faced. */
+function oppRoll(e) {
+  if (!oppLane || M?.status !== 'playing') return;
+  oppLane.lane = createLane(O && !O.done ? O.standing : FULL_RACK);
+  launch(oppLane.lane, { power: clamp(e.power, 0, 1.2), aim: clamp(e.aim, -1, 1), spin: clamp(e.spin, -1, 1) });
+  oppLane.done = 0;
+}
+function onOppGame(o, g) {
+  renderCard();
+  if (g.rolls.length !== o.rolls.length + 1) return;
+  const c = callRoll(o.rolls, g.rolls[g.rolls.length - 1]);
+  if (c === 'strike') say(`🎳 ${oppName()}: STRIKE!`);
+  else if (c === 'spare') say(`${oppName()}: spare`);
+  if (game.state === 'over' && G && bowlState(G.rolls).done) showEnd(bowlState(G.rolls), true);
 }
 
 // ---------- lobby ----------
@@ -96,7 +228,7 @@ let qrKey = '';
 function renderLobby() {
   $('laneCode').textContent = net.code || '····';
   if (net.code) {
-    const url = `${publicBase()}/phone.html?code=${net.code}&seat=0&game=bowl`;
+    const url = `${publicBase()}/phone.html?code=${net.code}&seat=${net.seat}&game=bowl`;
     if (qrKey !== url) {
       qrKey = url;
       QRCode.toString(url, { type: 'svg', margin: 1, color: { dark: '#1d2340', light: '#ffffff' } })
@@ -114,10 +246,24 @@ function renderLobby() {
   chip.querySelector('span').textContent = net.phoneReady ? (net.tapMode ? '📱 Phone (tap)' : '📱 Phone ball') : net.phoneConnected ? '📱 Calibrating…' : '📱 No phone';
 
   const st = G ? bowlState(G.rolls) : null;
-  const mid = !!(st && G.rolls.length && !st.done);
+  const mid = !net.vs && !!(st && G.rolls.length && !st.done);
+  $('btnNewGame').classList.toggle('hidden', !mid);
+  for (const id of ['btnVersus', 'joinRow', 'bestCard']) $(id).classList.toggle('hidden', net.vs);
+  for (const id of ['vsPlayers', 'btnSolo']) $(id).classList.toggle('hidden', !net.vs);
+  $('btnCopy').classList.toggle('hidden', !net.vs || !!M?.laptopB);
+  $('codeLabel').textContent = net.vs ? 'Match' : 'Lane';
+  if (net.vs && M) {
+    const row = (name, ready, isMe) => `<div class="pl ${ready ? 'ready' : ''}"><span>${esc(name || 'Waiting for player 2…')}${isMe ? ' (you)' : ''}</span><b>${name ? (ready ? '✔ Ready' : '…') : ''}</b></div>`;
+    $('vsPlayers').innerHTML = row(M.nameA, M.readyA, net.seat === 0) + row(M.nameB, M.readyB, net.seat === 1);
+    // The phone is the ball: no paired, calibrated phone, no match (the server refuses it too).
+    const noPhone = !net.phoneReady && !myReady();
+    $('btnStart').disabled = noPhone;
+    $('btnStart').textContent = noPhone ? (net.phoneConnected ? '📱 Calibrating phone…' : '📱 Pair your phone first')
+      : myReady() ? '✖ Not ready' : M.laptopB ? '✋ Ready' : '✋ Ready (waiting for player 2)';
+    return;
+  }
   $('btnStart').textContent = !net.phoneReady ? '📱 Pair your phone to bowl' : mid ? `▶ Resume frame ${st.frame + 1}` : '▶ Start bowling';
   $('btnStart').disabled = !G || !net.phoneReady;
-  $('btnNewGame').classList.toggle('hidden', !mid);
 }
 
 function renderBest() {
@@ -130,15 +276,21 @@ function renderBest() {
 }
 
 // ---------- scorecard ----------
-function renderCard() {
-  const st = G ? bowlState(G.rolls) : bowlState([]);
+function cardHtml(rolls, name) {
+  const st = bowlState(rolls);
   const cur = st.done ? -1 : st.frame;
   const frames = st.frames.map((f, i) => {
     const marks = frameMarks(f, i === 9);
     const boxes = (i === 9 ? [0, 1, 2] : [0, 1]).map(k => `<i class="${marks[k] === 'X' ? 'x' : marks[k] === '/' ? 'sp' : ''}">${marks[k] ?? ''}</i>`).join('');
     return `<div class="frame ${i === cur ? 'cur' : ''} ${i === 9 ? 'tenth' : ''}"><span class="fn">${i + 1}</span><div class="balls">${boxes}</div><b>${f.total ?? ''}</b></div>`;
   }).join('');
-  $('scorecard').innerHTML = `<div class="sc-name"><span>${esc(G?.name || nameNow())}</span></div>${frames}<div class="sc-total"><span>Total</span><b>${st.score}</b></div>`;
+  return `<div class="sc-name"><span>${esc(name)}</span></div>${frames}<div class="sc-total"><span>Total</span><b>${st.score}</b></div>`;
+}
+function renderCard() {
+  const st = G ? bowlState(G.rolls) : bowlState([]);
+  $('scorecard').innerHTML = cardHtml(G?.rolls ?? [], myName());
+  $('oppCard').classList.toggle('hidden', !net.vs);
+  if (net.vs) $('oppCard').innerHTML = cardHtml(O?.rolls ?? [], oppName());
   $('frameChip').textContent = st.done ? 'FINAL' : `FRAME ${st.frame + 1} · BALL ${st.ball + 1}`;
 }
 
@@ -151,6 +303,7 @@ function renderPinMap(standing, knocked = 0) {
 // ---------- flow ----------
 function startPlay() {
   initAudioSafe(); sfx.ui();
+  if (net.vs) { if (M?.status === 'lobby') act('setReady', { ready: !myReady() }); return; }
   if (!G) return;
   const st = bowlState(G.rolls);
   if (st.done) { act('bowlNew'); game.pendingSeq = G.rollSeq + 1; }
@@ -165,6 +318,12 @@ function toLobby() {
   $('hud').classList.add('hidden');
   $('endCard').classList.add('hidden');
   world.guide.group.visible = false;
+  if (net.vs) dockVideo(true);
+}
+/** ⌂ / Esc: back to the lobby, or in a 1v1 pause the match (the pause screen can leave it). */
+function goHome() {
+  if (!net.vs) { toLobby(); return; }
+  if (M?.status === 'playing') act('setPaused', { paused: true });
 }
 
 /** Ball in hand at the foul line, rack as the server holds it. */
@@ -184,6 +343,7 @@ function enterAim(standing, rebuild) {
 
 function bowl(power, aim, spin) {
   if (game.state !== 'aim') return;
+  if (net.vs && M?.status !== 'playing') return;
   initAudioSafe();
   game.lastPower = power;
   launch(lane, { power, aim, spin });
@@ -200,6 +360,11 @@ function onPhone(e) {
   if (e.kind === 'aim') { game.aim = clamp(e.aim, -1, 1); game.spin = clamp(e.spin, -1, 1); return; }
   if (e.kind !== 'roll') return;
   game.aim = clamp(e.aim, -1, 1); game.spin = clamp(e.spin, -1, 1);
+  if (net.vs) {
+    // Swing to ready up, and for a rematch, like the badminton racket.
+    if (M?.status === 'lobby') { if (!myReady() && net.phoneReady) act('setReady', { ready: true }); return; }
+    if (M?.status === 'over') { if (game.state === 'over') act('rematch'); return; }
+  }
   if (game.state === 'lobby') return startPlay();
   if (game.state === 'over') return playAgain();
   if (game.state === 'aim') { game.aimShown = game.aim; game.spinShown = game.spin; bowl(clamp(e.power, 0, 1.2), game.aim, game.spin); }
@@ -249,6 +414,8 @@ function countStreak(rolls) {
 function onGame() {
   renderCard();
   if (game.state === 'over' && G && G.rolls.length === 0) enterAim(FULL_RACK, true), $('endCard').classList.add('hidden');
+  // Already finished with the ball still in hand (a reload, another tab): straight to the end card.
+  else if (game.state === 'aim' && G && bowlState(G.rolls).done) showEnd(bowlState(G.rolls));
 }
 
 function finishSweep() {
@@ -259,19 +426,47 @@ function finishSweep() {
   return true;
 }
 
-function showEnd(st) {
+/** `quiet`: just refresh the card (1v1, the opponent bowled while we wait). */
+function showEnd(st, quiet = false) {
+  const again = game.state === 'over';
   game.state = 'over';
-  $('endScore').textContent = st.score;
-  $('endName').textContent = G?.name || nameNow();
-  $('endTitle').textContent = st.score >= 250 ? 'LEGENDARY!' : st.score >= 180 ? 'ON FIRE! 🔥' : st.score >= 120 ? 'NICE GAME!' : st.score >= 70 ? 'GOOD GAME!' : 'GG!';
-  $('endStats').innerHTML = `<span><b>${st.strikes}</b> strike${st.strikes === 1 ? '' : 's'}</span><span><b>${st.spares}</b> spare${st.spares === 1 ? '' : 's'}</span>`;
+  world.guide.group.visible = false;
+  const side = (score, name, won) => `<div class="end-side ${won ? 'won' : ''}"><b>${score}</b><span>${esc(name)}</span></div>`;
+  let final = true;
+  if (net.vs) {
+    const os = bowlState(O?.rolls ?? []);
+    const over = M?.status === 'over', forfeit = over && !(st.done && os.done);
+    final = over;
+    const won = M?.winner === net.seat, tie = over && M?.winner === 255;
+    $('endTitle').textContent = !over ? 'WAITING…' : forfeit ? (won ? `${oppName().toUpperCase()} LEFT` : 'YOU LEFT')
+      : tie ? 'TIE GAME!' : won ? 'YOU WIN! 🏆' : `${oppName().toUpperCase()} WINS`;
+    $('endCard').classList.toggle('lost', over && !won && !tie);
+    $('endLine').innerHTML = `${side(st.score, myName(), over && (won || tie))}<span class="end-dash">–</span>${side(os.score, oppName(), over && !won)}`;
+    $('endStats').innerHTML = `<span><b>${st.strikes}</b> strike${st.strikes === 1 ? '' : 's'}</span><span><b>${st.spares}</b> spare${st.spares === 1 ? '' : 's'}</span>`
+      + (over ? '' : `<span class="end-wait">${esc(oppName())} is on frame ${os.frame + 1}</span>`);
+    $('btnAgain').textContent = '↻ Rematch';
+    $('btnAgain').classList.toggle('hidden', !over);
+    $('btnEndLobby').classList.add('hidden');
+  } else {
+    $('endCard').classList.remove('lost');
+    $('endLine').innerHTML = side(st.score, myName(), true);
+    $('endTitle').textContent = st.score >= 250 ? 'LEGENDARY!' : st.score >= 180 ? 'ON FIRE! 🔥' : st.score >= 120 ? 'NICE GAME!' : st.score >= 70 ? 'GOOD GAME!' : 'GG!';
+    $('endStats').innerHTML = `<span><b>${st.strikes}</b> strike${st.strikes === 1 ? '' : 's'}</span><span><b>${st.spares}</b> spare${st.spares === 1 ? '' : 's'}</span>`;
+    $('btnAgain').textContent = '↻ Play again';
+    $('btnAgain').classList.remove('hidden');
+    $('btnEndLobby').classList.remove('hidden');
+  }
   const card = $('endCard');
+  if (quiet && again) { card.classList.remove('hidden'); return; }
   card.classList.remove('hidden', 'go'); void card.offsetWidth; card.classList.add('go');
-  sfx.win();
-  world.confetti.burst(new THREE.Vector3(0, 0.6, HEAD_Z - 0.2), 1.4);
+  if (final && (!net.vs || M?.winner === net.seat || M?.winner === 255)) {
+    sfx.win();
+    world.confetti.burst(new THREE.Vector3(0, 0.6, HEAD_Z - 0.2), 1.4);
+  } else if (final) sfx.lose();
 }
 function playAgain() {
   initAudioSafe(); sfx.ui();
+  if (net.vs) { act('rematch'); return; }
   if (!G) return;
   $('endCard').classList.add('hidden');
   act('bowlNew');
@@ -289,7 +484,7 @@ function callout(text, color, sub = '') {
 // The phone is the only controller; Esc just returns to the lobby.
 window.addEventListener('keydown', e => {
   if (e.target instanceof HTMLInputElement) { if (e.key === 'Enter') e.target.blur(); return; }
-  if (e.key === 'Escape' && game.state !== 'lobby') toLobby();
+  if (e.key === 'Escape' && game.state !== 'lobby') goHome();
 });
 
 // ---------- name, buttons ----------
@@ -303,10 +498,28 @@ $('nameInput').addEventListener('change', () => {
 $('btnStart').addEventListener('click', startPlay);
 $('btnNewGame').addEventListener('click', () => { act('bowlNew'); if (G) game.pendingSeq = G.rollSeq + 1; startPlayFresh(); });
 function startPlayFresh() { initAudioSafe(); sfx.ui(); enterAim(FULL_RACK, true); $('lobby').classList.remove('show'); $('hud').classList.remove('hidden'); }
-$('btnHome').addEventListener('click', () => { sfx.ui(); toLobby(); });
+$('btnHome').addEventListener('click', () => { sfx.ui(); goHome(); });
 $('btnAgain').addEventListener('click', playAgain);
 $('btnEndLobby').addEventListener('click', () => { sfx.ui(); toLobby(); });
-for (const a of document.querySelectorAll('a[href="/"]')) a.addEventListener('click', () => act('leaveMatch'));
+$('btnVersus').addEventListener('click', () => { initAudioSafe(); sfx.ui(); act('createVersus', { sport: 'bowl', name: nameNow() }); });
+$('btnSolo').addEventListener('click', () => { sfx.ui(); startSolo(); });
+$('btnJoin').addEventListener('click', () => { sfx.ui(); joinCode($('joinInput').value, false); });
+$('joinInput').addEventListener('keydown', e => { if (e.key === 'Enter') joinCode($('joinInput').value, false); });
+$('btnCopy').addEventListener('click', () => {
+  const url = `${publicBase()}/bowling.html?join=${net.code}`;
+  navigator.clipboard?.writeText(url).then(() => say('Invite link copied'), () => say(`Copy failed. Share code ${net.code}`));
+});
+$('btnResume').addEventListener('click', () => { sfx.ui(); act('setPaused', { paused: false }); });
+$('btnPauseLeave').addEventListener('click', () => { sfx.ui(); startSolo(); });
+// Leave the lane before going home, so the menu doesn't find us still on it.
+for (const a of document.querySelectorAll('a[href="/"]')) {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const go = () => { location.href = '/'; };
+    setTimeout(go, 1500);
+    try { Promise.resolve(net.conn?.reducers.leaveMatch({})).finally(go); } catch { go(); }
+  });
+}
 window.addEventListener('pointerdown', initAudioSafe, { once: true });
 function initAudioSafe() { try { initAudio(); } catch { /* audio unavailable */ } }
 
@@ -334,6 +547,18 @@ function handleSounds(events, vol) {
 function stepNeighbours(dt) {
   for (const n of neighbours) {
     const L = n.lane;
+    if (net.vs && n === oppLane) {
+      // The opponent's lane: only their rolls; once the pins settle, show the rack they face next.
+      if (L.ball.live) {
+        acc2(L, dt, 0.25);
+        if (settled(L) && (n.done += dt) > 1.6) {
+          n.lane = createLane(O && !O.done ? O.standing : FULL_RACK);
+          for (const p of n.lane.pins) p.drop = 0.55;
+          n.lane.ball.gone = true; n.done = 0;
+        }
+      }
+      continue;
+    }
     if (L.ball.live && !L.ball.gone) {
       acc2(L, dt, 0.18);
     } else if (L.ball.live && L.ball.gone) {
@@ -428,7 +653,7 @@ function frame() {
   const b = lane.ball;
   if (game.state === 'lobby') {
     camTarget.set(Math.sin(elapsed * 0.18) * 0.9, 1.5, 3.2); lookTarget.set(Math.sin(elapsed * 0.18) * 0.3, 0.35, -14);
-  } else if (game.state === 'aim' || game.state === 'over') {
+  } else if (game.state === 'aim' || game.state === 'over' || game.state === 'countdown') {
     camTarget.set(game.aimShown * 0.08, 1.15, 2.6); lookTarget.set(game.aimShown * 0.6, -0.2, -10);
   } else if (game.state === 'rolling' && !b.gone && b.z > HEAD_Z + 4.6) {
     camTarget.set(b.x * 0.5, 0.75 + Math.max(0, b.z + 6) * 0.03, b.z + 2.0); lookTarget.set(b.x * 0.5, 0.12, b.z - 7);
