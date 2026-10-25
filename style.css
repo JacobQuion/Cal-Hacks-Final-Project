@@ -441,6 +441,7 @@ body.with-video #callout, body.with-video #subcallout { right: calc(var(--video-
 
 /* ---------- Game theme (laptop): bright rounded cards, chunky buttons, one rounded typeface ---------- */
 body.arena {
+  color-scheme: only light;
   --ink: #1c2033;
   --sub: #737a93;
   --line: #e4e7ef;
