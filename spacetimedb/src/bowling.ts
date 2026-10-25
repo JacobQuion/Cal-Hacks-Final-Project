@@ -102,3 +102,6 @@ export function callRoll(prev: readonly number[], pins: number): 'strike' | 'spa
   if (!st.fresh && pins === st.up) return 'spare';
   return pins === 0 ? 'gutter' : 'pins';
 }
+
+/** bowl_game key of a lane: the match id for seat 0 (and solo games), offset for player 2 of a 1v1. */
+export const laneKey = (matchId: number, seat: number) => (seat === 1 ? matchId + 0x8000_0000 : matchId);
