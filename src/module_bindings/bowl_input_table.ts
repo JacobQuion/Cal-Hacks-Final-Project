@@ -17,4 +17,5 @@ export default __t.row({
   aim: __t.f32(),
   spin: __t.f32(),
   tap: __t.bool(),
+  seat: __t.u8(),
 });
