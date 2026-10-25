@@ -437,12 +437,6 @@ function showLobby(m) {
   $('btnReady').textContent = noPhone ? (phone.connected ? 'Calibrating phone…' : 'Pair your phone first')
     : ai ? '▶ Start match' : myReady ? '✖ Not ready' : m.laptopB ? '✋ Ready' : '✋ Ready (waiting for player 2)';
   $('btnReady').classList.toggle('hidden', net.spectator);
-  $('optFog').checked = m.fogEnabled;
-  $('optFog').disabled = net.spectator || net.seat !== 0;
-  $('optFogNote').textContent = net.seat !== 0 ? '(host decides)' : '';
-  const lo = first(net.conn.db.myLoadout.iter());
-  $('optScout').checked = lo ? lo.scout : true;
-  $('optScout').disabled = net.spectator;
   renderQR(m.code, net.seat);
 }
 
@@ -848,8 +842,6 @@ $('btnReady').addEventListener('click', () => {
   if (!M) return;
   act('setReady', { ready: !(net.seat === 0 ? M.readyA : M.readyB) });
 });
-$('optFog').addEventListener('change', () => act('setFog', { on: $('optFog').checked }));
-$('optScout').addEventListener('change', () => act('setScout', { on: $('optScout').checked }));
 $('btnCopy').addEventListener('click', () => {
   navigator.clipboard?.writeText($('btnCopy').dataset.url).then(() => say('Invite link copied'), () => say(`Copy failed. Share code ${M?.code || ''}`));
 });
