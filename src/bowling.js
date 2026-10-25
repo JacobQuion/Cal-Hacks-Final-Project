@@ -20,6 +20,12 @@ import { createVideoCall } from './video.js';
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const first = it => { for (const x of it) return x; return undefined; };
+/** Solo or doubles, in big letters at the top of the lobby. */
+function setModeBanner(vs) {
+  const b = $('modeBanner');
+  b.classList.toggle('doubles', vs);
+  b.innerHTML = vs ? '<b>👥 DOUBLES</b><span>1v1 against a friend</span>' : '<b>🎳 SOLO</b><span>just you and the pins</span>';
+}
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const STEP = 1 / 480;
 
@@ -46,6 +52,15 @@ const game = {
   lastPower: 0.7,
   t: 0, standingBefore: FULL_RACK, pendingSeq: -1, nextFresh: false, lastSpeed: 0,
 };
+
+// Picked on the main menu (?play=solo or ?play=vs): the lane is set up the moment the socket opens,
+// so the QR doesn't wait for the full sync. A reload (param gone) resumes whatever we're in.
+const intent = params.get('play');
+if (intent) {
+  params.delete('play');
+  history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
+}
+setModeBanner(intent === 'vs');
 
 // ---------- SpacetimeDB ----------
 const say = (msg, ms = 2400) => {
@@ -76,6 +91,11 @@ connect({
     conn.db.myFrame.onInsert((_c, row) => video.frame(row));
     conn.db.myFrame.onUpdate?.((_c, _o, row) => video.frame(row));
   },
+  onOpen(conn) {
+    if (!intent || net.intentSent) return;
+    net.intentSent = true; net.conn = conn;
+    if (intent === 'vs') act('createVersus', { sport: 'bowl', name: nameNow() }); else startSolo();
+  },
   onReady(conn) {
     net.conn = conn;
     act('setName', { name: nameNow() });
@@ -86,7 +106,7 @@ connect({
     if (join) {
       params.delete('join'); history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
       joinCode(join, !(m && (m.mode === 'bowl' || m.mode === 'bowlvs')));
-    } else if (!(m && ((m.mode === 'bowl' && m.status === 'lobby') || m.mode === 'bowlvs'))) startSolo();
+    } else if (!net.intentSent && !(m && ((m.mode === 'bowl' && m.status === 'lobby') || m.mode === 'bowlvs'))) startSolo();
     refresh();
   },
   onStatus(text) { $('connStatus').textContent = text || '● Connected to SpacetimeDB'; },
@@ -252,6 +272,7 @@ function renderLobby() {
   for (const id of ['vsPlayers', 'btnSolo']) $(id).classList.toggle('hidden', !net.vs);
   $('btnCopy').classList.toggle('hidden', !net.vs || !!M?.laptopB);
   $('codeLabel').textContent = net.vs ? 'Match' : 'Lane';
+  setModeBanner(net.code ? net.vs : intent === 'vs');
   if (net.vs && M) {
     const row = (name, ready, isMe) => `<div class="pl ${ready ? 'ready' : ''}"><span>${esc(name || 'Waiting for player 2…')}${isMe ? ' (you)' : ''}</span><b>${name ? (ready ? '✔ Ready' : '…') : ''}</b></div>`;
     $('vsPlayers').innerHTML = row(M.nameA, M.readyA, net.seat === 0) + row(M.nameB, M.readyB, net.seat === 1);
