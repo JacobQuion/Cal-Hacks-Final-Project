@@ -10,7 +10,7 @@ import { schema, table, t, SenderError, type InferSchema, type ReducerCtx } from
 import { ScheduleAt } from 'spacetimedb';
 import {
   LEVELS, SPECIALS, TIME_SCALE, Shuttle, aiDecide, flightOf, makeServe, makeShot, predictContact,
-  serveSpots, sideOf, gradeTiming, crossingOf, HALF_L, type Gesture, type Special,
+  serveSpots, sideOf, gradePlayerSwing, crossingOf, HALF_L, type Gesture, type Special,
 } from './core';
 import { FULL_RACK, bowlState, pinCount } from './bowling';
 
@@ -1091,7 +1091,7 @@ export const swing = spacetimedb.reducer(
     const clientDt = dtMs / 1000;
     const link = serverDt - clientDt;
     const dt = link >= -0.08 && link <= MAX_LINK_S ? clientDt : serverDt - 0.15;
-    const grade = gradeTiming(dt);
+    const grade = gradePlayerSwing(dt);
     if (!grade) return; // a whiff by the server's clock — the shuttle keeps falling
     hit(ctx, m, seat, Math.max(0, Math.min(1.2, power)), Math.max(-1, Math.min(1, aim)), grade, { dir, slice });
   }

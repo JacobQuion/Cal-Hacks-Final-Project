@@ -183,7 +183,8 @@ export function crossingOf(p0: Vec, v: Vec) {
 
 // ---------- timing ----------
 // Timing windows in real seconds (swing time − ideal contact time).
-export const WINDOWS = { perfect: 0.07, good: 0.15, ok: 0.26 };
+// `assist`: a player's swing anywhere this close still returns the shuttle (graded EARLY/LATE).
+export const WINDOWS = { perfect: 0.07, good: 0.15, ok: 0.26, assist: 0.6 };
 
 export function gradeTiming(dt: number) {
   const a = Math.abs(dt);
@@ -191,6 +192,11 @@ export function gradeTiming(dt: number) {
   if (a <= WINDOWS.good) return 'GOOD';
   if (a <= WINDOWS.ok) return dt < 0 ? 'EARLY' : 'LATE';
   return null;
+}
+
+/** Players get the forgiving window, so nearly every swing connects. The CPU still uses gradeTiming. */
+export function gradePlayerSwing(dt: number) {
+  return gradeTiming(dt) ?? (Math.abs(dt) <= WINDOWS.assist ? (dt < 0 ? 'EARLY' : 'LATE') : null);
 }
 
 // ---------- shots ----------

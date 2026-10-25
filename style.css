@@ -698,11 +698,6 @@ body.bowl .pause-btn { top: 18px; font-size: 22px; }
 .bp-bar b { position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--mint), var(--blue)); }
 .bp-bar.hook b { background: var(--purple); }
 .bp-item.power .bp-bar b { background: linear-gradient(90deg, var(--green), var(--yellow), var(--red)); }
-.bowl-keys {
-  position: absolute; left: 50%; bottom: 92px; transform: translateX(-50%); white-space: nowrap;
-  font-size: 14px; font-weight: 800; color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, .8);
-}
-.bowl-keys b { padding: 1px 8px; border-radius: 6px; background: rgba(255, 255, 255, .2); }
 
 /* Pins left: a little rack in the corner */
 .pin-map {

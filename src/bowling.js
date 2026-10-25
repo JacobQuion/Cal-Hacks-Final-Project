@@ -32,11 +32,10 @@ const net = { conn: null, matchId: 0, code: '', phoneConnected: false, phoneRead
 let G = null;              // this lane's bowl_game row
 const game = {
   state: 'lobby',          // lobby | aim | rolling | count | sweep | over
-  aim: 0, spin: 0,         // targets (phone or keys)
+  aim: 0, spin: 0,         // targets from the phone
   aimShown: 0, spinShown: 0,
-  charging: false, power: 0, lastPower: 0.7,
+  lastPower: 0.7,
   t: 0, standingBefore: FULL_RACK, pendingSeq: -1, nextFresh: false, lastSpeed: 0,
-  usedKeys: false,
 };
 
 // ---------- SpacetimeDB ----------
@@ -112,15 +111,13 @@ function renderLobby() {
   const chip = $('inputChip');
   chip.classList.remove('good', 'wait');
   if (net.phoneReady) chip.classList.add('good'); else if (net.phoneConnected) chip.classList.add('wait');
-  chip.querySelector('span').textContent = net.phoneReady ? (net.tapMode ? '📱 Phone (tap)' : '📱 Phone ball') : net.phoneConnected ? '📱 Calibrating…' : '⌨️ Keyboard';
-  $('keysHint').classList.toggle('hidden', net.phoneReady && !game.usedKeys);
+  chip.querySelector('span').textContent = net.phoneReady ? (net.tapMode ? '📱 Phone (tap)' : '📱 Phone ball') : net.phoneConnected ? '📱 Calibrating…' : '📱 No phone';
 
   const st = G ? bowlState(G.rolls) : null;
   const mid = !!(st && G.rolls.length && !st.done);
-  $('btnStart').textContent = mid ? `▶ Resume frame ${st.frame + 1}` : net.phoneReady ? '▶ Start bowling' : '▶ Start with keyboard';
-  $('btnStart').disabled = !G;
+  $('btnStart').textContent = !net.phoneReady ? '📱 Pair your phone to bowl' : mid ? `▶ Resume frame ${st.frame + 1}` : '▶ Start bowling';
+  $('btnStart').disabled = !G || !net.phoneReady;
   $('btnNewGame').classList.toggle('hidden', !mid);
-  $('startHint').classList.toggle('hidden', net.phoneReady);
 }
 
 function renderBest() {
@@ -163,7 +160,7 @@ function startPlay() {
   $('endCard').classList.add('hidden');
 }
 function toLobby() {
-  game.state = 'lobby'; game.charging = false;
+  game.state = 'lobby';
   $('lobby').classList.add('show');
   $('hud').classList.add('hidden');
   $('endCard').classList.add('hidden');
@@ -200,7 +197,7 @@ function bowl(power, aim, spin) {
 }
 
 function onPhone(e) {
-  if (e.kind === 'aim') { game.aim = clamp(e.aim, -1, 1); game.spin = clamp(e.spin, -1, 1); game.usedKeys = false; return; }
+  if (e.kind === 'aim') { game.aim = clamp(e.aim, -1, 1); game.spin = clamp(e.spin, -1, 1); return; }
   if (e.kind !== 'roll') return;
   game.aim = clamp(e.aim, -1, 1); game.spin = clamp(e.spin, -1, 1);
   if (game.state === 'lobby') return startPlay();
@@ -289,35 +286,11 @@ function callout(text, color, sub = '') {
 }
 
 // ---------- keys ----------
-const keys = new Set();
+// The phone is the only controller; Esc just returns to the lobby.
 window.addEventListener('keydown', e => {
-  initAudioSafe();
   if (e.target instanceof HTMLInputElement) { if (e.key === 'Enter') e.target.blur(); return; }
-  keys.add(e.key.toLowerCase());
-  if (e.key === ' ') {
-    e.preventDefault();
-    if (game.state === 'lobby') startPlay();
-    else if (game.state === 'over') playAgain();
-    else if (game.state === 'aim' && !game.charging) { game.charging = true; game.power = 0; game.usedKeys = true; renderLobby(); }
-  }
-  if (e.key === 'Enter' && game.state === 'lobby') startPlay();
   if (e.key === 'Escape' && game.state !== 'lobby') toLobby();
 });
-window.addEventListener('keyup', e => {
-  keys.delete(e.key.toLowerCase());
-  if (e.key === ' ' && game.charging) { game.charging = false; bowl(game.power, game.aim, game.spin); }
-});
-window.addEventListener('blur', () => { keys.clear(); game.charging = false; });
-
-function keyInput(dt) {
-  if (game.state !== 'aim') return;
-  const ax = (keys.has('arrowright') ? 1 : 0) - (keys.has('arrowleft') ? 1 : 0);
-  const sx = (keys.has('d') ? 1 : 0) - (keys.has('a') ? 1 : 0);
-  if (ax || sx) game.usedKeys = true;
-  game.aim = clamp(game.aim + ax * dt * 0.9, -1, 1);
-  game.spin = clamp(game.spin + sx * dt * 1.2, -1, 1);
-  if (game.charging) game.power = Math.min(1.2, game.power + dt * 1.1);
-}
 
 // ---------- name, buttons ----------
 const nameNow = () => $('nameInput').value.trim() || 'Bowler';
@@ -378,7 +351,6 @@ function acc2(L, dt, vol) {
 }
 
 function update(dt) {
-  keyInput(dt);
   soundBudget -= dt;
   const k = Math.min(1, dt * 8);
   game.aimShown += (game.aim - game.aimShown) * k;
@@ -417,8 +389,8 @@ function update(dt) {
   const h = $('hookFill');
   h.style.left = `${50 + Math.min(0, game.spinShown) * 50}%`; h.style.width = `${Math.abs(game.spinShown) * 50}%`;
   if (game.state === 'aim') {
-    $('powerLabel').textContent = game.charging ? '⚡ Power' : net.phoneReady ? '📱 Swing!' : '⚡ Hold Space';
-    $('powerFill').style.width = `${(game.charging ? game.power / 1.2 : 0) * 100}%`;
+    $('powerLabel').textContent = '📱 Swing!';
+    $('powerFill').style.width = '0%';
   }
 }
 

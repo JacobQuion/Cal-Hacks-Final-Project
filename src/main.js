@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import QRCode from 'qrcode';
 import { createWorld } from './scene.js';
-import { Shuttle, predictContact, serveSpots, gradeTiming, TIME_SCALE, HALF_L, WINDOWS, LEVELS } from './physics.js';
+import { Shuttle, predictContact, serveSpots, gradePlayerSwing, TIME_SCALE, HALF_L, WINDOWS, LEVELS } from './physics.js';
 import { FX } from './fx.js';
 import { hud } from './hud.js';
 import { initAudio, sfx } from './audio.js';
@@ -19,7 +19,6 @@ const other = w => (w === 'you' ? 'cpu' : 'you');
 const first = it => { for (const x of it) return x; return undefined; };
 const STEP = 1 / 240;
 const LINK_LATENCY = 0.03;        // typical phone → laptop delay (s)
-const REACH = 2.4;                // how far (m) the player may still be from the contact point (lunge)
 const params = new URLSearchParams(location.search);
 
 const world = createWorld($('game'));
@@ -593,14 +592,11 @@ function playerSwing(power, aim, lag = 0, gesture = {}) {
 
   const swingT = game.gameT - lag * TIME_SCALE;
   const dt = (swingT - inc.contactT) / TIME_SCALE;
-  const grade = gradeTiming(dt);
+  const grade = gradePlayerSwing(dt);
   const inPlay = shuttle.active && !shuttle.landed && shuttle.pos.y > 0.08;
-  const near = me.pos.distanceTo(me.target) < REACH;
-  if (!grade || !near || !inPlay) {
+  if (!grade || !inPlay) {
     me.whiffUntil = elapsed + 0.25;
-    const msg = !near && grade ? 'CAN\'T REACH!' : dt < 0 ? 'TOO EARLY' : 'TOO LATE';
-    if (!near && grade) inc.hit = true;
-    hud.sub(msg, '#ffffff');
+    hud.sub(dt < 0 ? 'TOO EARLY' : 'TOO LATE', '#ffffff');
     if (dt > 0) inc.hit = true; // late whiff — that was the chance
     return;
   }
@@ -888,7 +884,7 @@ function update(dt) {
   if (!net.spectator && game.phase === 'rally' && inc && inc.who === 'you' && !inc.hit) {
     const left = (inc.contactT - game.gameT) / TIME_SCALE;
     fx.setTiming(inc.contactPos, left);
-    if (left < -WINDOWS.ok) { inc.hit = true; fx.setTiming(null, null); }
+    if (left < -WINDOWS.assist) { inc.hit = true; fx.setTiming(null, null); }
   } else fx.setTiming(null, null);
 
   // Aim marker on the opponent's court
