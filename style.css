@@ -585,8 +585,11 @@ body.arena #menu .logo-shuttle { font-size: 40px; right: -34px; top: -10px; }
   background: var(--surface-2); box-shadow: inset 0 0 0 2px transparent, 0 4px 0 var(--line);
   transition: transform .16s var(--spring), box-shadow .15s, background .15s;
 }
-.game-btn:hover { transform: translateY(-3px); background: var(--surface); box-shadow: inset 0 0 0 2px var(--yellow), 0 6px 0 var(--yellow-deep); }
-.game-btn:active { transform: translateY(3px); box-shadow: inset 0 0 0 2px var(--yellow), 0 1px 0 var(--yellow-deep); }
+.game-btn:hover {
+  transform: translateY(-4px) scale(1.04); background: var(--surface);
+  box-shadow: inset 0 0 0 3px #fff, 0 6px 0 rgba(255, 255, 255, .55), 0 0 24px rgba(255, 255, 255, .35);
+}
+.game-btn:active { transform: translateY(3px) scale(1.01); box-shadow: inset 0 0 0 3px #fff, 0 1px 0 rgba(255, 255, 255, .55), 0 0 14px rgba(255, 255, 255, .3); }
 .game-icon {
   width: 58px; height: 58px; margin-bottom: 4px; border-radius: 50%; display: grid; place-items: center;
   font-size: 32px; line-height: 1; background: var(--surface); box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
