@@ -36,8 +36,9 @@
         </div>
       </div>
       <div class="card side-card">
-        <div class="room-code">Table <b id="tableCode">····</b></div>
+        <div class="room-code"><span id="codeLabel">Table</span> <b id="tableCode">····</b><button class="small-btn hidden" id="btnCopy">🔗 Copy invite</button></div>
         <label class="field"><span>Player</span><input id="nameInput" maxlength="16" autocomplete="off" /></label>
+        <div class="players hidden" id="vsPlayers"></div>
         <div class="seg" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
           <button data-level="0" class="on">Easy</button>
           <button data-level="1">Medium</button>
@@ -45,6 +46,9 @@
         </div>
         <button class="big-btn primary" id="btnStart">▶ Start game</button>
         <button class="small-btn hidden" id="btnNewGame">↻ New game</button>
+        <button class="small-btn" id="btnVersus">⚔️ Play a friend (1v1)</button>
+        <div class="join-row" id="joinRow"><input id="joinInput" maxlength="4" placeholder="CODE" autocomplete="off" aria-label="Match code" /><button class="small-btn" id="btnJoin">Join</button></div>
+        <button class="small-btn hidden" id="btnSolo">🤖 Play the NPC instead</button>
         <a class="small-btn back-link" href="/">⌂ Back to main menu</a>
       </div>
     </div>
@@ -92,6 +96,35 @@
       <a class="small-btn" href="/">⌂ Main menu</a>
     </div>
   </div>
+  <!-- 1v1 pause -->
+  <section id="pause" class="screen">
+    <h2 class="title-xl">PAUSED</h2>
+    <p class="pause-reason" id="pauseReason"></p>
+    <button class="big-btn primary" id="btnResume">▶ Resume</button>
+    <button class="big-btn" id="btnPauseLeave">⌂ Leave match</button>
+  </section>
+
+  <!-- 1v1 video call -->
+  <aside id="videoPanel" class="video-panel hidden" aria-label="Video call">
+    <div class="vtile opp" id="vTileOpp">
+      <video id="vidOpp" autoplay playsinline></video>
+      <img id="vidOppRelay" class="vrelay" alt="" />
+      <div class="vph"><b id="vInitOpp">?</b><span id="vNoteOpp">Calling…</span></div>
+      <span class="vname"><i class="vmic"></i><em id="vNameOpp">Opponent</em></span>
+      <button class="vunmute hidden" id="btnVidUnmute">🔈 Click for sound</button>
+    </div>
+    <div class="vtile me" id="vTileMe">
+      <video id="vidMe" autoplay playsinline muted></video>
+      <div class="vph"><b id="vInitMe">Y</b><span id="vNoteMe">Starting camera…</span></div>
+      <span class="vname"><i class="vmic"></i><em id="vNameMe">You</em></span>
+    </div>
+    <div class="vctl">
+      <button id="btnMic" title="Mute microphone" aria-label="Microphone"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg></button>
+      <button id="btnCam" title="Turn camera off" aria-label="Camera"><svg viewBox="0 0 24 24"><path d="M15 8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-2.2l4.4 2.9A1 1 0 0 0 21 15.9V8.1a1 1 0 0 0-1.6-.8L15 10.2V8Z"/></svg></button>
+      <span class="vlive"><i></i>LIVE</span>
+      <button id="btnVidMin" title="Minimize video" aria-label="Minimize video">–</button>
+    </div>
+  </aside>
   <div id="toast"></div>
 
   <script type="module" src="/src/pingpong.js"></script>
