@@ -12,7 +12,7 @@ import {
   LEVELS, SPECIALS, TIME_SCALE, Shuttle, aiDecide, flightOf, makeServe, makeShot, predictContact,
   serveSpots, sideOf, gradePlayerSwing, crossingOf, HALF_L, type Gesture, type Special,
 } from './core';
-import { FULL_RACK, bowlState, pinCount } from './bowling';
+import { FULL_RACK, bowlState, pinCount, laneKey } from './bowling';
 import { pongDone } from './pong';
 
 // ───────────────────────── public tables ─────────────────────────
@@ -37,7 +37,7 @@ const match = table(
   {
     id: t.u32().primaryKey().autoInc(),
     code: t.string().unique(),
-    mode: t.string(),            // ai | pvp
+    mode: t.string(),            // ai | pvp (badminton), bowl | bowlvs (bowling), pong | pongvs (ping pong)
     level: t.u8(),
     status: t.string(),          // lobby | countdown | playing | paused | over
     phase: t.string(),           // serve | rally | point
@@ -306,13 +306,14 @@ const rtcFrame = table(
 
 // ───────────────────────── bowling ─────────────────────────
 
-// One solo bowling game per bowling "match" (mode = bowl). The laptop's lane physics reports which
-// pins fell; the database checks them against the rack it holds and keeps score (strikes and spares
-// wait for their bonus balls), so the laptop, the phone and anyone else read the same scorecard.
+// One bowling game per lane. A solo match (mode = bowl) has one lane, keyed by the match id; a 1v1
+// (mode = bowlvs) has one per seat (laneKey). The laptop's lane physics reports which pins fell; the
+// database checks them against the rack it holds and keeps score (strikes and spares wait for their
+// bonus balls), so the laptops, the phones and anyone else read the same scorecard.
 const bowlGame = table(
   { name: 'bowl_game', public: true },
   {
-    matchId: t.u32().primaryKey(),
+    matchId: t.u32().primaryKey(),   // laneKey(match id, seat)
     name: t.string(),
     rolls: t.array(t.u8()),      // pins down per ball, in order
     standing: t.u16(),           // rack for the next ball (bit i = pin i+1)
@@ -336,16 +337,18 @@ const bowlScore = table(
   }
 );
 
-// Phone → its laptop: live aim + hook (kind = aim) or a bowled ball (kind = roll).
+// Phone → its laptop: live aim + hook (kind = aim) or a bowled ball (kind = roll). In a 1v1 the other
+// laptop sees the opponent's rolls too and replays them on the lane next door.
 const bowlInput = table(
   { name: 'bowl_input', public: true, event: true },
-  { matchId: t.u32(), kind: t.string(), power: t.f32(), aim: t.f32(), spin: t.f32(), tap: t.bool() }
+  { matchId: t.u32(), kind: t.string(), power: t.f32(), aim: t.f32(), spin: t.f32(), tap: t.bool(), seat: t.u8().default(0) }
 );
 
 // ───────────────────────── ping pong ─────────────────────────
 
-// One game to 11 against the NPC per ping pong "match" (mode = pong). The laptop plays the rally and
-// reports each point; the database keeps score and decides when the game is over.
+// One game to 11 per ping pong match: against the NPC (mode = pong) or a 1v1 (mode = pongvs). The
+// laptops play the rally and report each point; the database keeps score and decides when the game is
+// over. `me` is seat 0's score and `cpu` seat 1's (the NPC, or player 2).
 const pongGame = table(
   { name: 'pong_game', public: true },
   {
@@ -354,7 +357,7 @@ const pongGame = table(
     level: t.u8(),
     me: t.u8(),
     cpu: t.u8(),
-    firstServer: t.u8(),         // 0 = player, 1 = NPC
+    firstServer: t.u8(),         // seat: 0 = player (1), 1 = NPC (player 2)
     done: t.bool(),
     gameNo: t.u32(),
     seq: t.u32(),                // bumps on every point and new game
@@ -382,7 +385,15 @@ const pongScore = table(
 // Phone → its laptop: live paddle tilt (kind = tilt) or a flick (kind = swing).
 const pongInput = table(
   { name: 'pong_input', public: true, event: true },
-  { matchId: t.u32(), kind: t.string(), tilt: t.f32(), power: t.f32(), tap: t.bool() }
+  { matchId: t.u32(), kind: t.string(), tilt: t.f32(), power: t.f32(), tap: t.bool(), seat: t.u8().default(0) }
+);
+
+// 1v1 ping pong, laptop → the other laptop: a hit. `data` is the ball's flight (JSON, in the hitter's
+// frame); the receiving laptop plays it and decides whether its player got it back. `seq` is the
+// pong_game seq the hit belongs to, so a hit from a point that's already over is dropped.
+const pongShot = table(
+  { name: 'pong_shot', public: true, event: true },
+  { matchId: t.u32(), seat: t.u8(), seq: t.u32(), data: t.string() }
 );
 
 // ───────────────────────── schedule table ─────────────────────────
@@ -404,7 +415,7 @@ const spacetimedb = schema({
   device, match, shotFeed, hallOfFame, queue,
   shot, shotLog, secret, stamina, readPick, targetZone, pointLog, loadout,
   swingEvent, aimEvent, hitEvent, rallyEvent, readEvent, noticeEvent,
-  rtcMail, rtcFrame, timer, bowlGame, bowlScore, bowlInput, pongGame, pongScore, pongInput,
+  rtcMail, rtcFrame, timer, bowlGame, bowlScore, bowlInput, pongGame, pongScore, pongInput, pongShot,
 });
 export default spacetimedb;
 
@@ -449,6 +460,14 @@ function upsertDevice(ctx: Ctx, patch: Partial<DeviceRow>): DeviceRow {
   ctx.db.device.insert(row);
   return row;
 }
+
+// Matches two people play from their own laptops (joinable by code, with a video call).
+const VERSUS = ['pvp', 'pongvs', 'bowlvs'];
+const isBadminton = (m: MatchRow) => m.mode === 'ai' || m.mode === 'pvp';
+const isPong = (m: MatchRow) => m.mode === 'pong' || m.mode === 'pongvs';
+const isBowl = (m: MatchRow) => m.mode === 'bowl' || m.mode === 'bowlvs';
+const modeLabel = (m: MatchRow) =>
+  m.mode === 'ai' ? `vs NPC ${LEVELS[m.level]?.name ?? ''}` : m.mode === 'pongvs' ? '🏓 1v1' : m.mode === 'bowlvs' ? '🎳 1v1' : '1v1';
 
 const seatLaptop = (m: MatchRow, seat: number) => (seat === 0 ? m.laptopA : m.laptopB);
 const seatPhone = (m: MatchRow, seat: number) => (seat === 0 ? m.phoneA : m.phoneB);
@@ -742,14 +761,15 @@ function endRally(ctx: Ctx, m: MatchRow, winner: number, reason: string, s: Shot
 function finishMatch(ctx: Ctx, m: MatchRow, winner: number, why: string) {
   const next = { ...m, status: 'over', phase: '', winner, shotSeq: m.shotSeq + 1 };
   ctx.db.match.id.update(next);
+  if (why) notice(ctx, m.id, why);
+  if (winner === NONE) return; // a tied bowling 1v1
   let fastest = 0;
   for (const l of ctx.db.shotLog.matchId.filter(m.id)) if (l.gameNo === m.gameNo && l.name === 'SMASH!' && l.speedKmh > fastest) fastest = l.speedKmh;
   ctx.db.hallOfFame.insert({
     id: 0, winner: seatName(m, winner), loser: seatName(m, other(winner)),
     score: winner === 0 ? `${m.scoreA}–${m.scoreB}` : `${m.scoreB}–${m.scoreA}`,
-    mode: m.mode === 'ai' ? `vs NPC ${LEVELS[m.level]?.name ?? ''}` : '1v1', fastestSmashKmh: fastest, longestRally: m.longestRally, at: ctx.timestamp,
+    mode: modeLabel(m), fastestSmashKmh: fastest, longestRally: m.longestRally, at: ctx.timestamp,
   });
-  if (why) notice(ctx, m.id, why);
 }
 
 /** Pause after a disconnect or on request. The rally in flight is replayed when play resumes. */
@@ -760,8 +780,8 @@ function pauseMatch(ctx: Ctx, m: MatchRow, reason: string) {
 
 function resumeMatch(ctx: Ctx, m: MatchRow) {
   ctx.db.match.id.update({ ...m, status: 'playing', pausedReason: '', phase: 'point', shotSeq: m.shotSeq + 1 });
-  notice(ctx, m.id, 'Resumed — replaying the point');
-  schedule(ctx, m.id, 'serve_ready', 1500, m.pointNo);
+  notice(ctx, m.id, isBowl(m) ? 'Resumed' : 'Resumed — replaying the point');
+  if (isBadminton(m)) schedule(ctx, m.id, 'serve_ready', 1500, m.pointNo);
 }
 
 /** Who has to be online for this match to run: both laptops, plus any phone that was paired. */
@@ -854,8 +874,9 @@ export const joinMatch = spacetimedb.reducer({ code: t.string(), name: t.string(
   if (!m) throw new SenderError(`No match with code ${code.toUpperCase()}`);
   const me = hex(ctx);
   if (m.laptopA === me || m.laptopB === me) return;
-  if (m.mode !== 'pvp') throw new SenderError('That is a match against the NPC');
+  if (!VERSUS.includes(m.mode)) throw new SenderError(isBadminton(m) ? 'That is a match against the NPC' : 'That is a solo game');
   if (m.laptopB) throw new SenderError('That match is full');
+  if (m.status !== 'lobby') throw new SenderError('That match has already started');
   leaveCurrent(ctx);
   const n = cleanName(name);
   ctx.db.match.id.update({ ...m, laptopB: me, nameB: n });
@@ -985,6 +1006,9 @@ export const phoneAim = spacetimedb.reducer({ aim: t.f32(), pitch: t.f32() }, (c
 
 // ───────────────────────── bowling ─────────────────────────
 
+const freshLane = (matchId: number, name: string, gameNo: number, rollSeq: number) =>
+  ({ matchId, name, rolls: [], standing: FULL_RACK, score: 0, done: false, gameNo, rollSeq });
+
 /** A solo bowling lane: a match (mode = bowl) the phone pairs to like any other, plus its scorecard. */
 export const startBowling = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
   leaveCurrent(ctx);
@@ -993,20 +1017,22 @@ export const startBowling = spacetimedb.reducer({ name: t.string() }, (ctx, { na
   m.laptopA = hex(ctx); m.nameA = n; m.fogEnabled = false;
   const row = ctx.db.match.insert(m);
   upsertDevice(ctx, { kind: 'laptop', name: n, matchId: row.id, seat: 0 });
-  ctx.db.bowlGame.insert({ matchId: row.id, name: n, rolls: [], standing: FULL_RACK, score: 0, done: false, gameNo: 1, rollSeq: 0 });
+  ctx.db.bowlGame.insert(freshLane(row.id, n, 1, 0));
 });
 
+/** The caller's lane, and the match it belongs to. */
 function myBowlGame(ctx: Ctx) {
-  const { m } = myLaptopSeat(ctx);
-  const g = m.mode === 'bowl' ? ctx.db.bowlGame.matchId.find(m.id) : undefined;
+  const { m, seat } = myLaptopSeat(ctx);
+  const g = isBowl(m) ? ctx.db.bowlGame.matchId.find(laneKey(m.id, seat)) : undefined;
   if (!g) throw new SenderError('Not on a bowling lane');
-  return g;
+  return { g, m, seat };
 }
 
 /** One ball: `knocked` = the pins (bitmask) that went down. Only pins still standing count. */
 export const bowlRoll = spacetimedb.reducer({ knocked: t.u16() }, (ctx, { knocked }) => {
-  const g = myBowlGame(ctx);
+  const { g, m, seat } = myBowlGame(ctx);
   if (g.done) throw new SenderError('Game over — start a new game');
+  if (m.mode === 'bowlvs' && m.status !== 'playing') throw new SenderError('The match is not on');
   const down = knocked & g.standing;
   const rolls = [...g.rolls, pinCount(down)];
   const st = bowlState(rolls);
@@ -1015,12 +1041,23 @@ export const bowlRoll = spacetimedb.reducer({ knocked: t.u16() }, (ctx, { knocke
   if (st.done) {
     ctx.db.bowlScore.insert({ id: 0, name: g.name, score: st.score, strikes: st.strikes, spares: st.spares, at: ctx.timestamp });
   }
+  if (m.mode !== 'bowlvs') return;
+  // 1v1: the match row carries both totals (for the live list); it's over when both lanes are done.
+  const opp = ctx.db.bowlGame.matchId.find(laneKey(m.id, other(seat)));
+  const next = seat === 0 ? { ...m, scoreA: st.score, scoreB: opp?.score ?? 0 } : { ...m, scoreA: opp?.score ?? 0, scoreB: st.score };
+  if (st.done && opp?.done) {
+    finishMatch(ctx, next, next.scoreA === next.scoreB ? NONE : next.scoreA > next.scoreB ? 0 : 1, '');
+  } else {
+    ctx.db.match.id.update(next);
+    if (st.done) notice(ctx, m.id, `🎳 ${seatName(m, seat)} finished with ${st.score}`);
+  }
 });
 
 export const bowlNew = spacetimedb.reducer(ctx => {
-  const g = myBowlGame(ctx);
+  const { g, m } = myBowlGame(ctx);
+  if (m.mode === 'bowlvs') throw new SenderError('1v1 games restart with a rematch');
   const d = ctx.db.device.identity.find(ctx.sender);
-  ctx.db.bowlGame.matchId.update({ ...g, name: d?.name || g.name, rolls: [], standing: FULL_RACK, score: 0, done: false, gameNo: g.gameNo + 1, rollSeq: g.rollSeq + 1 });
+  ctx.db.bowlGame.matchId.update({ ...freshLane(g.matchId, d?.name || g.name, g.gameNo + 1, g.rollSeq + 1) });
 });
 
 export const phoneBowl = spacetimedb.reducer(
@@ -1031,11 +1068,14 @@ export const phoneBowl = spacetimedb.reducer(
       if (a.kind === 'aim') return;
       throw new SenderError('Not a paired phone');
     }
-    ctx.db.bowlInput.insert({ matchId: d.matchId, ...a });
+    ctx.db.bowlInput.insert({ matchId: d.matchId, seat: d.seat, ...a });
   }
 );
 
 // ───────────────────────── ping pong ─────────────────────────
+
+const freshPong = (matchId: number, name: string, level: number, firstServer: number, gameNo: number, seq: number) =>
+  ({ matchId, name, level, me: 0, cpu: 0, firstServer, done: false, gameNo, seq, longestRally: 0, perfects: 0, last: '' });
 
 /** A ping pong table against the NPC: a match (mode = pong) the phone pairs to, plus its score. */
 export const startPong = spacetimedb.reducer({ name: t.string(), level: t.u8() }, (ctx, { name, level }) => {
@@ -1045,37 +1085,88 @@ export const startPong = spacetimedb.reducer({ name: t.string(), level: t.u8() }
   m.laptopA = hex(ctx); m.nameA = n; m.fogEnabled = false;
   const row = ctx.db.match.insert(m);
   upsertDevice(ctx, { kind: 'laptop', name: n, matchId: row.id, seat: 0 });
-  ctx.db.pongGame.insert({ matchId: row.id, name: n, level: Math.min(2, level), me: 0, cpu: 0, firstServer: 0, done: false, gameNo: 1, seq: 0, longestRally: 0, perfects: 0, last: '' });
+  ctx.db.pongGame.insert(freshPong(row.id, n, m.level, 0, 1, 0));
 });
 
-function myPongGame(ctx: Ctx) {
-  const { m } = myLaptopSeat(ctx);
-  const g = m.mode === 'pong' ? ctx.db.pongGame.matchId.find(m.id) : undefined;
-  if (!g) throw new SenderError('Not at a ping pong table');
-  return g;
+/**
+ * A 1v1 ping pong table or bowling lane pair (sport = pong | bowl). Like a badminton 1v1: share the
+ * code, both laptops pair a phone and ready up, a countdown starts it, and the two laptops get a video call.
+ */
+export const createVersus = spacetimedb.reducer({ sport: t.string(), name: t.string() }, (ctx, { sport, name }) => {
+  if (sport !== 'pong' && sport !== 'bowl') throw new SenderError('Unknown sport');
+  leaveCurrent(ctx);
+  const n = cleanName(name);
+  const m = blankMatch(ctx, `${sport}vs`, 1);
+  m.laptopA = hex(ctx); m.nameA = n; m.fogEnabled = false; m.target = 0;
+  const row = ctx.db.match.insert(m);
+  upsertDevice(ctx, { kind: 'laptop', name: n, matchId: row.id, seat: 0 });
+  if (sport === 'pong') ctx.db.pongGame.insert(freshPong(row.id, n, 1, 0, 0, 0));
+  else for (const seat of [0, 1]) ctx.db.bowlGame.insert(freshLane(laneKey(row.id, seat), seat === 0 ? n : '', 0, 0));
+});
+
+/** Countdown over: a fresh game for both players (the rally itself runs on the laptops). */
+function startVersus(ctx: Ctx, m: MatchRow) {
+  const gameNo = m.gameNo + 1;
+  ctx.db.match.id.update({ ...m, status: 'playing', phase: '', scoreA: 0, scoreB: 0, winner: NONE, gameNo, pointNo: 0, rally: 0, longestRally: 0 });
+  if (m.mode === 'pongvs') {
+    const g = ctx.db.pongGame.matchId.find(m.id);
+    const row = freshPong(m.id, m.nameA, 1, (gameNo + 1) % 2, gameNo, (g?.seq ?? 0) + 1);
+    if (g) ctx.db.pongGame.matchId.update(row); else ctx.db.pongGame.insert(row);
+  } else {
+    for (const seat of [0, 1]) {
+      const key = laneKey(m.id, seat), g = ctx.db.bowlGame.matchId.find(key);
+      const row = freshLane(key, seatName(m, seat), gameNo, (g?.rollSeq ?? 0) + 1);
+      if (g) ctx.db.bowlGame.matchId.update(row); else ctx.db.bowlGame.insert(row);
+    }
+  }
 }
 
-/** One point: who won it, how long the rally was, and how it ended. */
+function myPongGame(ctx: Ctx) {
+  const { m, seat } = myLaptopSeat(ctx);
+  const g = isPong(m) ? ctx.db.pongGame.matchId.find(m.id) : undefined;
+  if (!g) throw new SenderError('Not at a ping pong table');
+  return { g, m, seat };
+}
+
+/**
+ * One point: whether the caller won it, how long the rally was, and how it ended. Against the NPC the
+ * one laptop reports every point; in a 1v1 the laptop whose player missed reports it (won = false).
+ */
 export const pongPoint = spacetimedb.reducer(
   { won: t.bool(), rally: t.u16(), perfects: t.u16(), why: t.string() },
   (ctx, { won, rally, perfects, why }) => {
-    const g = myPongGame(ctx);
+    const { g, m, seat } = myPongGame(ctx);
     if (g.done) throw new SenderError('Game over — start a new game');
-    const me = g.me + (won ? 1 : 0), cpu = g.cpu + (won ? 0 : 1);
+    const vs = m.mode === 'pongvs';
+    if (vs && m.status !== 'playing') return;
+    const winner = won ? seat : other(seat);
+    const me = g.me + (winner === 0 ? 1 : 0), cpu = g.cpu + (winner === 1 ? 1 : 0);
     const done = pongDone(me, cpu);
     const longestRally = Math.max(g.longestRally, Math.min(rally, 999));
     ctx.db.pongGame.matchId.update({ ...g, me, cpu, done, seq: g.seq + 1, longestRally, perfects: g.perfects + Math.min(perfects, 99), last: why.slice(0, 60) });
-    if (done) ctx.db.pongScore.insert({ id: 0, name: g.name, level: g.level, me, cpu, won: me > cpu, longestRally, at: ctx.timestamp });
+    if (!vs) {
+      if (done) ctx.db.pongScore.insert({ id: 0, name: g.name, level: g.level, me, cpu, won: me > cpu, longestRally, at: ctx.timestamp });
+      return;
+    }
+    const next = { ...m, scoreA: me, scoreB: cpu, pointNo: m.pointNo + 1, longestRally };
+    if (done) finishMatch(ctx, next, me > cpu ? 0 : 1, '');
+    else ctx.db.match.id.update(next);
   }
 );
 
+/** 1v1 ping pong: pass a hit to the other laptop. */
+export const pongHit = spacetimedb.reducer({ seq: t.u32(), data: t.string() }, (ctx, { seq, data }) => {
+  const { g, m, seat } = myPongGame(ctx);
+  if (m.mode !== 'pongvs' || m.status !== 'playing' || g.done || seq !== g.seq) return;
+  if (data.length > 4000) throw new SenderError('Shot too large');
+  ctx.db.pongShot.insert({ matchId: m.id, seat, seq, data });
+});
+
 export const pongNew = spacetimedb.reducer({ level: t.u8() }, (ctx, { level }) => {
-  const g = myPongGame(ctx);
+  const { g, m } = myPongGame(ctx);
+  if (m.mode === 'pongvs') throw new SenderError('1v1 games restart with a rematch');
   const d = ctx.db.device.identity.find(ctx.sender);
-  ctx.db.pongGame.matchId.update({
-    ...g, name: d?.name || g.name, level: Math.min(2, level), me: 0, cpu: 0, firstServer: g.gameNo % 2, done: false,
-    gameNo: g.gameNo + 1, seq: g.seq + 1, longestRally: 0, perfects: 0, last: '',
-  });
+  ctx.db.pongGame.matchId.update(freshPong(g.matchId, d?.name || g.name, Math.min(2, level), g.gameNo % 2, g.gameNo + 1, g.seq + 1));
 });
 
 export const phonePong = spacetimedb.reducer(
@@ -1086,14 +1177,14 @@ export const phonePong = spacetimedb.reducer(
       if (a.kind === 'tilt') return;
       throw new SenderError('Not a paired phone');
     }
-    ctx.db.pongInput.insert({ matchId: d.matchId, ...a });
+    ctx.db.pongInput.insert({ matchId: d.matchId, seat: d.seat, ...a });
   }
 );
 
 /** Video call: pass a WebRTC signaling message to the other laptop of this 1v1. */
 export const rtcSignal = spacetimedb.reducer({ data: t.string() }, (ctx, { data }) => {
   const { m, seat } = myLaptopSeat(ctx);
-  if (m.mode !== 'pvp') throw new SenderError('Video is for 1v1 matches');
+  if (!VERSUS.includes(m.mode)) throw new SenderError('Video is for 1v1 matches');
   const to = seatLaptop(m, other(seat));
   if (!to || to === 'AI') return;
   if (data.length > 16_000) throw new SenderError('Signal too large');
@@ -1103,7 +1194,7 @@ export const rtcSignal = spacetimedb.reducer({ data: t.string() }, (ctx, { data 
 /** Video fallback: replace the camera frame waiting for the other laptop ('' = camera off). */
 export const rtcSendFrame = spacetimedb.reducer({ data: t.string() }, (ctx, { data }) => {
   const { m, seat } = myLaptopSeat(ctx);
-  if (m.mode !== 'pvp') return;
+  if (!VERSUS.includes(m.mode)) return;
   const to = seatLaptop(m, other(seat));
   if (!to || to === 'AI') return;
   if (data.length > 40_000) throw new SenderError('Frame too large');
@@ -1210,10 +1301,14 @@ export const swing = spacetimedb.reducer(
 export const onTimer = spacetimedb.reducer({ onSchedule: timer }, { arg: timer.rowType }, (ctx, { arg }) => {
   const m = ctx.db.match.id.find(arg.matchId);
   if (!m) return;
+  if (arg.kind === 'start') {
+    if (m.status === 'countdown' && calibratingSeat(ctx, m) < 0) {
+      if (isBadminton(m)) startPlay(ctx, m); else startVersus(ctx, m);
+    }
+    return;
+  }
+  if (!isBadminton(m)) return; // the rest drives a badminton rally
   switch (arg.kind) {
-    case 'start':
-      if (m.status === 'countdown' && calibratingSeat(ctx, m) < 0) startPlay(ctx, m);
-      return;
     case 'serve_ready': {
       if (m.status !== 'playing' || m.phase !== 'point' || m.pointNo !== arg.seq) return;
       const next = { ...m, phase: 'serve', rally: 0, shotSeq: m.shotSeq + 1 };
