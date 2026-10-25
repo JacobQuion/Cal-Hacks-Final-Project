@@ -6,7 +6,7 @@
   <title>Rally</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,600;0,700;0,800;0,900;1,900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,600;0,700;0,800;0,900;1,900&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body class="arena">
@@ -21,34 +21,31 @@
     <div class="menu-grid">
       <div class="card play-card">
         <label class="field"><span>Your name</span><input id="nameInput" maxlength="16" autocomplete="off" /></label>
-        <div class="modes">
-          <div class="mode">
-            <div class="mode-head">
-              <span class="mode-icon">🎯</span>
-              <div><h3>Badminton Solo</h3><p>Play against an NPC</p></div>
-            </div>
-            <button class="big-btn primary" id="btnAI">Play vs NPC</button>
+        <div class="pick">
+          <span class="pick-label">Players</span>
+          <div class="play-seg" id="playSeg" role="radiogroup" aria-label="Solo or doubles">
+            <button data-play="solo" role="radio"><span class="ps-icon">🤖</span><span><b>Solo</b><small>You vs the NPC</small></span></button>
+            <button data-play="vs" role="radio"><span class="ps-icon">👥</span><span><b>Doubles</b><small>1v1 vs a friend</small></span></button>
           </div>
-          <div class="mode">
-            <div class="mode-head">
-              <span class="mode-icon red">⚔️</span>
-              <div><h3>Badminton Versus</h3><p>Take on a friend</p></div>
-            </div>
-            <button class="big-btn pink" id="btnCreate">Create Match</button>
+        </div>
+        <div class="pick" id="levelPick">
+          <span class="pick-label">NPC difficulty</span>
+          <div class="seg level-seg" id="menuLevelSeg" role="radiogroup" aria-label="NPC difficulty">
+            <button data-level="0">Easy</button>
+            <button data-level="1">Medium</button>
+            <button data-level="2">Hard</button>
           </div>
-          <div class="mode">
-            <div class="mode-head">
-              <span class="mode-icon blue">🎳</span>
-              <div><h3>Bowling</h3><p>Swing to bowl, tilt to hook</p></div>
-            </div>
-            <a class="big-btn blue" id="btnBowl" href="/bowling.html">Play Bowling</a>
-          </div>
-          <div class="mode">
-            <div class="mode-head">
-              <span class="mode-icon blue">🏓</span>
-              <div><h3>Ping Pong</h3><p>Swing forehand or backhand</p></div>
-            </div>
-            <a class="big-btn mint" id="btnPong" href="/pingpong.html">Play Ping Pong</a>
+        </div>
+        <div class="pick hidden" id="joinPick">
+          <span class="pick-label">Friend already made a match? Enter their code</span>
+          <div class="join-row"><input id="menuJoinInput" maxlength="4" placeholder="CODE" autocomplete="off" aria-label="Match code" /><button class="small-btn" id="btnMenuJoin">Join</button></div>
+        </div>
+        <div class="pick">
+          <span class="pick-label">Pick a game</span>
+          <div class="games">
+            <button class="game-btn" data-game="badminton"><span class="game-icon">🏸</span><b>Badminton</b><small class="game-sub"></small></button>
+            <button class="game-btn" data-game="pong"><span class="game-icon">🏓</span><b>Ping Pong</b><small class="game-sub"></small></button>
+            <button class="game-btn" data-game="bowl"><span class="game-icon">🎳</span><b>Bowling</b><small class="game-sub"></small></button>
           </div>
         </div>
       </div>
@@ -75,7 +72,7 @@
     </div>
     <div class="menu-row">
       <div class="card pair-card">
-        <div class="qr" id="qr"><span class="hint">Loading…</span></div>
+        <div class="qr" id="qr"><span class="qr-wait"><i class="spinner"></i>Setting up…</span></div>
         <div class="pair-steps">
           <h3>Your phone is the racket</h3>
           <ol>
@@ -87,9 +84,10 @@
         </div>
       </div>
       <div class="card side-card">
+        <div class="mode-banner" id="modeBanner"></div>
         <div class="room-code">Match <b id="matchCode">····</b><button class="small-btn" id="btnCopy">🔗 Copy invite</button></div>
         <div class="players" id="lobbyPlayers"></div>
-        <div class="seg hidden" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
+        <div class="seg level-seg hidden" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
           <button data-level="0" class="on">Easy</button>
           <button data-level="1">Medium</button>
           <button data-level="2">Hard</button>
