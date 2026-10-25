@@ -239,17 +239,26 @@ function makeNet() {
 // ---------- LED boards (scrolling), jumbotron ----------
 // A segment's text may instead be a function (ctx, centreX, H) that draws sponsor artwork.
 function ledCanvas(segments) {
-  const W = 3072, H = 128;
-  return canvas(W, H, (ctx) => {
+  const W = 3072, H = 128, RES = 2;   // drawn at 2× so sponsor logos stay sharp
+  return canvas(W * RES, H * RES, (ctx) => {
+    ctx.scale(RES, RES);
     const seg = W / segments.length;
     segments.forEach(([bg1, bg2, fg, text, style], i) => {
       const x = i * seg;
       const gr = ctx.createLinearGradient(x, 0, x + seg, 0); gr.addColorStop(0, bg1); gr.addColorStop(1, bg2);
       ctx.fillStyle = gr; ctx.fillRect(x, 0, seg, H);
-      if (typeof text === 'function') { text(ctx, x + seg / 2, H); return; }
-      ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = style || '900 italic 76px "Arial Black", Arial, sans-serif';
-      ctx.fillText(text, x + seg / 2, H / 2 + 4);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, 0, seg, H); ctx.clip();   // nothing spills into the next segment
+      if (typeof text === 'function') text(ctx, x + seg / 2, H);
+      else {
+        ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = style || '900 italic 76px "Arial Black", Arial, sans-serif';
+        // Shrink long messages to fit the segment rather than squeezing or overflowing them.
+        const fit = Math.min(1, (seg * 0.88) / ctx.measureText(text).width);
+        if (fit < 1) ctx.font = ctx.font.replace(/(\d+(?:\.\d+)?)px/, (_, n) => `${(n * fit).toFixed(1)}px`);
+        ctx.fillText(text, x + seg / 2, H / 2 + 4);
+      }
+      ctx.restore();
     });
     // LED pixel grid
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -271,8 +280,8 @@ function makeBoards() {
   const party = ledCanvas(Array.from({ length: 6 }, (_, i) => (i % 2
     ? ['#ffb000', '#ff5a00', '#1a0d00', 'POINT!']
     : ['#1f0040', '#5a00b8', '#ffffff', 'WHAT A RALLY!'])));
-  const mainTex = tex(main, { repeat: [1, 1] }), partyTex = tex(party, { repeat: [1, 1] });
-  onBrandReady(() => { main.getContext('2d').drawImage(ledCanvas(segments), 0, 0); mainTex.needsUpdate = true; });
+  const mainTex = tex(main, { repeat: [1, 1], aniso: 16 }), partyTex = tex(party, { repeat: [1, 1], aniso: 16 });
+  onBrandReady(() => { const ctx = main.getContext('2d'); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(ledCanvas(segments), 0, 0); mainTex.needsUpdate = true; });
   const ledMat = new THREE.MeshBasicMaterial({ map: mainTex, color: new THREE.Color(1.5, 1.5, 1.5) });
   const housing = phys(0x0c0d12, { roughness: 0.4, clearcoat: 0.5 });
   const H = 0.82;
@@ -311,11 +320,13 @@ function makeBoards() {
 }
 
 function makeJumbotron() {
-  const c = document.createElement('canvas'); c.width = 1024; c.height = 400;
-  const t = tex(c);
+  const RES = 2;   // 1024 × 400 layout, drawn at 2× for sharp text and logos
+  const c = document.createElement('canvas'); c.width = 1024 * RES; c.height = 400 * RES;
+  const t = tex(c, { aniso: 16 });
   let key = '';
   const draw = (s) => {
-    const ctx = c.getContext('2d'), w = c.width, h = c.height;
+    const ctx = c.getContext('2d'), w = c.width / RES, h = c.height / RES;
+    ctx.setTransform(RES, 0, 0, RES, 0, 0);
     const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#081226'); bg.addColorStop(1, '#02050c');
     ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';

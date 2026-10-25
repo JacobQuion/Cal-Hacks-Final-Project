@@ -111,15 +111,18 @@ function maskTexture(n, color) {
     ctx.font = 'italic 900 112px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round'; ctx.lineWidth = 16; ctx.strokeStyle = '#1c2033';
     if (sponsor === 'stdb') { drawOrbits(ctx, w / 2 - 70, h / 2, 330, 0.3); drawSpacetimeWordmark(ctx, w / 2 - 70, h / 2 + 4, 84); }
-    else if (sponsor === 'calhacks') drawCalHacks(ctx, w / 2 - 70, h / 2, 220);
+    else if (sponsor === 'calhacks') drawCalHacks(ctx, w / 2 - 70, h / 2, 300);
     else { ctx.strokeText('RALLY', w / 2 - 60, h / 2 + 6); ctx.fillStyle = '#ffc61a'; ctx.fillText('RALLY', w / 2 - 60, h / 2 + 6); }
     ctx.font = 'italic 900 120px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round'; ctx.strokeStyle = '#1c2033';
     ctx.lineWidth = 14; ctx.strokeText(String(n), w - 110, h / 2 + 6);
     ctx.fillStyle = hex(color); ctx.fillText(String(n), w - 110, h / 2 + 6);
   };
-  const c = canvas(1024, 300, paint), t = tex(c);
-  if (sponsor === 'calhacks') onBrandReady(() => { paint(c.getContext('2d'), c.width, c.height); t.needsUpdate = true; });
+  // Same aspect as the masking unit's face (LANE_PITCH × 0.62 m), at 2× for sharp logos.
+  const W = 1024, H = Math.round(W * 0.62 / LANE_PITCH), RES = 2;
+  const draw = ctx => { ctx.setTransform(RES, 0, 0, RES, 0, 0); paint(ctx, W, H); };
+  const c = canvas(W * RES, H * RES, draw), t = tex(c, { aniso: 16 });
+  if (sponsor === 'calhacks') onBrandReady(() => { draw(c.getContext('2d')); t.needsUpdate = true; });
   return t;
 }
 

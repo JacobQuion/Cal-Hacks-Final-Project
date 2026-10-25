@@ -2,14 +2,24 @@
 // SpacetimeDB is drawn on canvas; the Cal Hacks 13.0 logo is the official SVG from calhacks.io.
 import calHacksUrl from './assets/calhacks-13.svg';
 
-const calHacks = new Image();
-calHacks.src = calHacksUrl;
+// The SVG is rasterised once at 2× its own size, so signs crop sharp vector pixels instead of
+// scaling up a small bitmap.
+const LOGO_SCALE = 2;
+let calHacks = null;
 const ready = [];
-calHacks.onload = () => { for (const fn of ready.splice(0)) fn(); };
+const img = new Image();
+img.onload = () => {
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth * LOGO_SCALE; c.height = img.naturalHeight * LOGO_SCALE;
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  calHacks = c;
+  for (const fn of ready.splice(0)) fn();
+};
+img.src = calHacksUrl;
 
 /** Run fn now if the Cal Hacks logo has loaded, else once it does (redraw the sign + flag the texture). */
 export function onBrandReady(fn) {
-  if (calHacks.complete && calHacks.naturalWidth) fn(); else ready.push(fn);
+  if (calHacks) fn(); else ready.push(fn);
 }
 
 /**
@@ -17,12 +27,12 @@ export function onBrandReady(fn) {
  * (Its navy lettering is made for a light background.) The plate shows even before the logo loads.
  */
 export function drawCalHacks(ctx, cx, cy, h) {
-  const sx = 125, sy = 125, sw = 630, sh = 440;   // the lettering's box inside the SVG
+  const [sx, sy, sw, sh] = [125, 125, 630, 440].map(v => v * LOGO_SCALE);   // the lettering's box inside the SVG
   const lh = h * 0.86, lw = lh * sw / sh, pw = lw + h * 0.5;
   ctx.save();
-  const g = ctx.createLinearGradient(0, cy - h / 2, 0, cy + h / 2); g.addColorStop(0, '#f4f8fd'); g.addColorStop(1, '#d5e3f1');
+  const g = ctx.createLinearGradient(0, cy - h / 2, 0, cy + h / 2); g.addColorStop(0, '#c3d2e4'); g.addColorStop(1, '#9fb4ce');   // not white: the signs are lit past 1.0 and bloom
   ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(cx - pw / 2, cy - h / 2, pw, h, h * 0.16); ctx.fill();
-  if (calHacks.complete && calHacks.naturalWidth) ctx.drawImage(calHacks, sx, sy, sw, sh, cx - lw / 2, cy - lh / 2, lw, lh);
+  if (calHacks) ctx.drawImage(calHacks, sx, sy, sw, sh, cx - lw / 2, cy - lh / 2, lw, lh);
   ctx.restore();
   return pw;
 }

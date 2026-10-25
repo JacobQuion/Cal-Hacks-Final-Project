@@ -75,20 +75,26 @@ function floorTexture() {
   }));
 }
 // text 'SPACETIMEDB' / 'CALHACKS' draws that sponsor's logo instead of lettering.
+// The canvas has the barrier face's own aspect (1.38 × 0.62 m) so nothing is stretched, at 2× for sharpness.
+const BAR_W = 1024, BAR_H = 460, BAR_RES = 2;
 function barrierTexture(color, text) {
   const paint = (ctx, w, h) => {
+    ctx.setTransform(BAR_RES, 0, 0, BAR_RES, 0, 0);
     const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#1b1f45'); g.addColorStop(1, '#0d1030');
     ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = color; ctx.fillRect(0, h - 14, w, 14);
-    if (text === 'SPACETIMEDB') { drawOrbits(ctx, w / 2, h / 2 - 7, 260, 0.3); drawSpacetimeWordmark(ctx, w / 2, h / 2 - 7, 62); return; }
-    if (text === 'CALHACKS') { drawCalHacks(ctx, w / 2, h / 2 - 7, 100); return; }
-    ctx.font = 'italic 900 70px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round'; ctx.lineWidth = 10; ctx.strokeStyle = '#05060d';
-    ctx.strokeText(text, w / 2, h / 2 - 4);
-    ctx.fillStyle = color; ctx.fillText(text, w / 2, h / 2 - 4);
+    ctx.fillStyle = color; ctx.fillRect(0, h - 30, w, 30);
+    const cy = (h - 30) / 2;
+    if (text === 'SPACETIMEDB') { drawOrbits(ctx, w / 2, cy, 480, 0.3); drawSpacetimeWordmark(ctx, w / 2, cy, 104); return; }
+    if (text === 'CALHACKS') { drawCalHacks(ctx, w / 2, cy, 300); return; }
+    ctx.font = 'italic 900 200px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const fit = Math.min(1, (w * 0.86) / ctx.measureText(text).width);
+    ctx.font = `italic 900 ${Math.floor(200 * fit)}px Nunito, system-ui, sans-serif`;
+    ctx.lineJoin = 'round'; ctx.lineWidth = 22 * fit; ctx.strokeStyle = '#05060d';
+    ctx.strokeText(text, w / 2, cy + 6);
+    ctx.fillStyle = color; ctx.fillText(text, w / 2, cy + 6);
   };
-  const c = canvas(1024, 128, paint), t = tex(c);
-  if (text === 'CALHACKS') onBrandReady(() => { paint(c.getContext('2d'), c.width, c.height); t.needsUpdate = true; });
+  const c = canvas(BAR_W * BAR_RES, BAR_H * BAR_RES, ctx => paint(ctx, BAR_W, BAR_H)), t = tex(c, { aniso: 16 });
+  if (text === 'CALHACKS') onBrandReady(() => { paint(c.getContext('2d'), BAR_W, BAR_H); t.needsUpdate = true; });
   return t;
 }
 
