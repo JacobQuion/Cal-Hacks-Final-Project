@@ -37,6 +37,7 @@ import {
 import BowlNewReducer from "./bowl_new_reducer";
 import BowlRollReducer from "./bowl_roll_reducer";
 import CreateMatchReducer from "./create_match_reducer";
+import CreateVersusReducer from "./create_versus_reducer";
 import JoinMatchReducer from "./join_match_reducer";
 import LeaveMatchReducer from "./leave_match_reducer";
 import LeaveQueueReducer from "./leave_queue_reducer";
@@ -48,6 +49,7 @@ import PhoneStatusReducer from "./phone_status_reducer";
 import PhoneSwingReducer from "./phone_swing_reducer";
 import PickReadReducer from "./pick_read_reducer";
 import PickSecretReducer from "./pick_secret_reducer";
+import PongHitReducer from "./pong_hit_reducer";
 import PongNewReducer from "./pong_new_reducer";
 import PongPointReducer from "./pong_point_reducer";
 import QuickMatchReducer from "./quick_match_reducer";
@@ -93,6 +95,7 @@ import NoticeEventRow from "./notice_event_table";
 import PongGameRow from "./pong_game_table";
 import PongInputRow from "./pong_input_table";
 import PongScoreRow from "./pong_score_table";
+import PongShotRow from "./pong_shot_table";
 import QueueRow from "./queue_table";
 import RallyEventRow from "./rally_event_table";
 import ReadEventRow from "./read_event_table";
@@ -228,6 +231,14 @@ const tablesSchema = __schema({
       { name: 'pong_score_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, PongScoreRow),
+  pongShot: __table({
+    name: 'pong_shot',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, PongShotRow),
   queue: __table({
     name: 'queue',
     indexes: [
@@ -372,6 +383,7 @@ const reducersSchema = __reducers(
   __reducerSchema("bowl_new", BowlNewReducer),
   __reducerSchema("bowl_roll", BowlRollReducer),
   __reducerSchema("create_match", CreateMatchReducer),
+  __reducerSchema("create_versus", CreateVersusReducer),
   __reducerSchema("join_match", JoinMatchReducer),
   __reducerSchema("leave_match", LeaveMatchReducer),
   __reducerSchema("leave_queue", LeaveQueueReducer),
@@ -383,6 +395,7 @@ const reducersSchema = __reducers(
   __reducerSchema("phone_swing", PhoneSwingReducer),
   __reducerSchema("pick_read", PickReadReducer),
   __reducerSchema("pick_secret", PickSecretReducer),
+  __reducerSchema("pong_hit", PongHitReducer),
   __reducerSchema("pong_new", PongNewReducer),
   __reducerSchema("pong_point", PongPointReducer),
   __reducerSchema("quick_match", QuickMatchReducer),
