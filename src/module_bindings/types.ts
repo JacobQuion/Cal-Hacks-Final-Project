@@ -37,6 +37,7 @@ export const BowlInput = __t.object("BowlInput", {
   aim: __t.f32(),
   spin: __t.f32(),
   tap: __t.bool(),
+  seat: __t.u8(),
 });
 export type BowlInput = __Infer<typeof BowlInput>;
 
@@ -211,6 +212,7 @@ export const PongInput = __t.object("PongInput", {
   tilt: __t.f32(),
   power: __t.f32(),
   tap: __t.bool(),
+  seat: __t.u8(),
 });
 export type PongInput = __Infer<typeof PongInput>;
 
@@ -225,6 +227,14 @@ export const PongScore = __t.object("PongScore", {
   at: __t.timestamp(),
 });
 export type PongScore = __Infer<typeof PongScore>;
+
+export const PongShot = __t.object("PongShot", {
+  matchId: __t.u32(),
+  seat: __t.u8(),
+  seq: __t.u32(),
+  data: __t.string(),
+});
+export type PongShot = __Infer<typeof PongShot>;
 
 export const Queue = __t.object("Queue", {
   identity: __t.identity(),
