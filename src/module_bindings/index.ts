@@ -34,12 +34,15 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import BowlNewReducer from "./bowl_new_reducer";
+import BowlRollReducer from "./bowl_roll_reducer";
 import CreateMatchReducer from "./create_match_reducer";
 import JoinMatchReducer from "./join_match_reducer";
 import LeaveMatchReducer from "./leave_match_reducer";
 import LeaveQueueReducer from "./leave_queue_reducer";
 import PairPhoneReducer from "./pair_phone_reducer";
 import PhoneAimReducer from "./phone_aim_reducer";
+import PhoneBowlReducer from "./phone_bowl_reducer";
 import PhoneStatusReducer from "./phone_status_reducer";
 import PhoneSwingReducer from "./phone_swing_reducer";
 import PickReadReducer from "./pick_read_reducer";
@@ -55,12 +58,16 @@ import SetNameReducer from "./set_name_reducer";
 import SetPausedReducer from "./set_paused_reducer";
 import SetReadyReducer from "./set_ready_reducer";
 import SetScoutReducer from "./set_scout_reducer";
+import StartBowlingReducer from "./start_bowling_reducer";
 import SwingReducer from "./swing_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
 import AimEventRow from "./aim_event_table";
+import BowlGameRow from "./bowl_game_table";
+import BowlInputRow from "./bowl_input_table";
+import BowlScoreRow from "./bowl_score_table";
 import ConditionRow from "./condition_table";
 import DeviceRow from "./device_table";
 import HallOfFameRow from "./hall_of_fame_table";
@@ -97,6 +104,36 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, AimEventRow),
+  bowlGame: __table({
+    name: 'bowl_game',
+    indexes: [
+      { accessor: 'matchId', name: 'bowl_game_match_id_idx_btree', algorithm: 'btree', columns: [
+        'matchId',
+      ] },
+    ],
+    constraints: [
+      { name: 'bowl_game_match_id_key', constraint: 'unique', columns: ['matchId'] },
+    ],
+  }, BowlGameRow),
+  bowlInput: __table({
+    name: 'bowl_input',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, BowlInputRow),
+  bowlScore: __table({
+    name: 'bowl_score',
+    indexes: [
+      { accessor: 'id', name: 'bowl_score_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'bowl_score_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, BowlScoreRow),
   device: __table({
     name: 'device',
     indexes: [
@@ -294,12 +331,15 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("bowl_new", BowlNewReducer),
+  __reducerSchema("bowl_roll", BowlRollReducer),
   __reducerSchema("create_match", CreateMatchReducer),
   __reducerSchema("join_match", JoinMatchReducer),
   __reducerSchema("leave_match", LeaveMatchReducer),
   __reducerSchema("leave_queue", LeaveQueueReducer),
   __reducerSchema("pair_phone", PairPhoneReducer),
   __reducerSchema("phone_aim", PhoneAimReducer),
+  __reducerSchema("phone_bowl", PhoneBowlReducer),
   __reducerSchema("phone_status", PhoneStatusReducer),
   __reducerSchema("phone_swing", PhoneSwingReducer),
   __reducerSchema("pick_read", PickReadReducer),
@@ -315,6 +355,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_paused", SetPausedReducer),
   __reducerSchema("set_ready", SetReadyReducer),
   __reducerSchema("set_scout", SetScoutReducer),
+  __reducerSchema("start_bowling", StartBowlingReducer),
   __reducerSchema("swing", SwingReducer),
 );
 

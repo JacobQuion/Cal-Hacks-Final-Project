@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 
-// Laptop page (index.html) + phone controller (phone.html). /v1 is proxied to the local SpacetimeDB
+// Laptop pages (index.html, bowling.html) + phone controller (phone.html). /v1 is proxied to the local SpacetimeDB
 // so a single tunnel URL serves pages, WebSockets and the database to phones and other laptops.
 export default defineConfig({
   server: {
@@ -18,7 +18,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      input: { main: resolve(import.meta.dirname, 'index.html'), phone: resolve(import.meta.dirname, 'phone.html') },
+      input: { main: resolve(import.meta.dirname, 'index.html'), phone: resolve(import.meta.dirname, 'phone.html'), bowling: resolve(import.meta.dirname, 'bowling.html') },
     },
   },
 });

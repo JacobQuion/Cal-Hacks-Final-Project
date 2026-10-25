@@ -87,6 +87,27 @@
       <div class="moves"><span><b>↓ Chop</b> smash</span><span><b>↑ Up</b> lift</span><span><b>→ Flick</b> clear</span><span><b>↻ Twist</b> drop</span></div>
     </section>
 
+    <!-- 6b. Bowl (bowling lane: the phone is the ball) -->
+    <section class="play hidden" id="s-bowl">
+      <div class="play-top">
+        <div class="mini-score" id="bScore">Frame 1 · 0</div>
+        <button class="small-btn" id="btnRecalB">Recalibrate</button>
+      </div>
+      <div class="prompt" id="bPrompt">Swing underhand to bowl!</div>
+      <div class="swing-pad bowl-pad" id="bPad">
+        <div class="bowl-ball" id="bBall"><i></i><i></i><i></i></div>
+        <div class="last" id="bLast"></div>
+        <div class="grade" id="bGrade"></div>
+        <div class="tap-hint" id="bHint">Tilt to hook, then swing underhand</div>
+      </div>
+      <div class="bowl-meters">
+        <label>Aim<div class="aim-bar"><i id="bAimDot"></i></div></label>
+        <label>Hook<div class="aim-bar hook-bar"><i id="bHookDot"></i></div></label>
+      </div>
+      <div class="meter"><i id="bMeter"></i></div>
+      <div class="moves phone-tips"><span><b>↔ Turn</b> aim</span><span><b>⟲ Tilt</b> hook</span><span><b>⤴ Swing</b> bowl</span></div>
+    </section>
+
   </main>
   <script type="module" src="/src/phone.js"></script>
 </body>

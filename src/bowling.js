@@ -1,0 +1,484 @@
+import * as THREE from 'three';
+import QRCode from 'qrcode';
+import { createBowlWorld } from './bowl-scene.js';
+import {
+  createLane, launch, stepLane, settled, knockedMask, standingMask, isSplit, previewPath, speedOf,
+  PIN_SPOTS, HEAD_Z, RELEASE_Z, BALL_R,
+} from './bowl-physics.js';
+import { FULL_RACK, bowlState, frameMarks, callRoll, pinCount } from '../spacetimedb/src/bowling.ts';
+import { initAudio, sfx } from './audio.js';
+import { connect, call, tables } from './stdb.js';
+
+// Bowling: the phone is the ball. Its swings and tilt arrive through SpacetimeDB (bowl_input), the
+// lane physics runs here, and the database checks each ball against the rack it holds and keeps
+// score (bowl_game), so the laptop and the phone show the same scorecard.
+
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const first = it => { for (const x of it) return x; return undefined; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const STEP = 1 / 480;
+
+const LANE_OFFSETS = [-2, -1, 0, 1, 2];
+const world = createBowlWorld($('game'), LANE_OFFSETS);
+const mainView = world.lanes.find(l => l.k === 0);
+let lane = createLane(FULL_RACK);
+
+// Neighbouring lanes bowl now and then, so the alley feels alive.
+const neighbours = world.lanes.filter(l => l.k !== 0).map((view, i) => ({ view, lane: createLane(FULL_RACK), wait: 3 + i * 2.7, done: 0 }));
+for (const n of neighbours) n.lane.ball.gone = true;
+
+const net = { conn: null, matchId: 0, code: '', phoneConnected: false, phoneReady: false, tapMode: false };
+let G = null;              // this lane's bowl_game row
+const game = {
+  state: 'lobby',          // lobby | aim | rolling | count | sweep | over
+  aim: 0, spin: 0,         // targets (phone or keys)
+  aimShown: 0, spinShown: 0,
+  charging: false, power: 0, lastPower: 0.7,
+  t: 0, standingBefore: FULL_RACK, pendingSeq: -1, nextFresh: false, lastSpeed: 0,
+  usedKeys: false,
+};
+
+// ---------- SpacetimeDB ----------
+const say = (msg, ms = 2400) => {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(say.t); say.t = setTimeout(() => t.classList.remove('show'), ms);
+};
+const act = (name, args = {}) => call(net.conn, name, args, say);
+
+connect({
+  subs: [tables.match, tables.device, tables.myDevice, tables.bowlGame, tables.bowlScore, tables.bowlInput, tables.noticeEvent],
+  wire(conn) {
+    net.conn = conn;
+    for (const t of ['match', 'device', 'myDevice', 'bowlScore']) {
+      conn.db[t].onInsert(queueRefresh); conn.db[t].onDelete(queueRefresh); conn.db[t].onUpdate?.(queueRefresh);
+    }
+    conn.db.bowlGame.onInsert(queueRefresh);
+    conn.db.bowlGame.onUpdate?.((_c, _o, row) => { if (row.matchId === net.matchId) { G = row; onGame(); } queueRefresh(); });
+    conn.db.bowlInput.onInsert((_c, e) => { if (e.matchId === net.matchId) onPhone(e); });
+    conn.db.noticeEvent.onInsert((_c, e) => { if (e.matchId === net.matchId) say(e.text); });
+  },
+  onReady(conn) {
+    net.conn = conn;
+    act('setName', { name: nameNow() });
+    // Same tab, same identity: a reload keeps the lane (and the paired phone).
+    const d = first(conn.db.myDevice.iter());
+    const m = d && d.matchId ? [...conn.db.match.iter()].find(x => x.id === d.matchId) : null;
+    if (!(m && m.mode === 'bowl' && m.status === 'lobby')) act('startBowling', { name: nameNow() });
+    refresh();
+  },
+  onStatus(text) { $('connStatus').textContent = text || '● Connected to SpacetimeDB'; },
+});
+
+let refreshQueued = false;
+function queueRefresh() { if (!refreshQueued) { refreshQueued = true; queueMicrotask(() => { refreshQueued = false; refresh(); }); } }
+
+function refresh() {
+  const conn = net.conn;
+  if (!conn) return;
+  const d = first(conn.db.myDevice.iter());
+  const m = d && d.matchId ? [...conn.db.match.iter()].find(x => x.id === d.matchId) : null;
+  const ours = m && m.mode === 'bowl' ? m : null;
+  net.matchId = ours ? ours.id : 0;
+  net.code = ours ? ours.code : '';
+  G = ours ? conn.db.bowlGame.matchId.find(ours.id) ?? null : null;
+  const ph = ours && [...conn.db.device.iter()].find(x => x.kind === 'phone' && x.matchId === ours.id && x.seat === 0);
+  net.phoneConnected = !!(ph && ph.online);
+  net.phoneReady = !!(ph && ph.online && ph.ready);
+  net.tapMode = !!(ph && ph.tapMode);
+  renderLobby();
+  renderBest();
+  renderCard();
+}
+
+// ---------- lobby ----------
+function publicBase() { return (import.meta.env.VITE_PUBLIC_URL || location.origin).replace(/\/$/, ''); }
+let qrKey = '';
+function renderLobby() {
+  $('laneCode').textContent = net.code || '····';
+  if (net.code) {
+    const url = `${publicBase()}/phone.html?code=${net.code}&seat=0&game=bowl`;
+    if (qrKey !== url) {
+      qrKey = url;
+      QRCode.toString(url, { type: 'svg', margin: 1, color: { dark: '#1d2340', light: '#ffffff' } })
+        .then(svg => { $('qr').innerHTML = svg; }).catch(() => { $('qr').textContent = 'QR failed'; });
+      $('phoneUrl').textContent = new URL(url).protocol !== 'https:' ? '⚠️ Phones need HTTPS: open this page from its https:// address' : '';
+    }
+  }
+  const s = $('phoneStatus');
+  const [cls, text] = !net.phoneConnected ? ['wait', 'Waiting for phone…'] : !net.phoneReady ? ['wait', 'Phone connected, calibrating…']
+    : ['good', net.tapMode ? 'Phone ready (tap mode)' : 'Phone ready! Swing to start'];
+  s.classList.remove('wait', 'good'); s.classList.add(cls); s.querySelector('span').textContent = text;
+  const chip = $('inputChip');
+  chip.classList.remove('good', 'wait');
+  if (net.phoneReady) chip.classList.add('good'); else if (net.phoneConnected) chip.classList.add('wait');
+  chip.querySelector('span').textContent = net.phoneReady ? (net.tapMode ? '📱 Phone (tap)' : '📱 Phone ball') : net.phoneConnected ? '📱 Calibrating…' : '⌨️ Keyboard';
+  $('keysHint').classList.toggle('hidden', net.phoneReady && !game.usedKeys);
+
+  const st = G ? bowlState(G.rolls) : null;
+  const mid = !!(st && G.rolls.length && !st.done);
+  $('btnStart').textContent = mid ? `▶ Resume frame ${st.frame + 1}` : net.phoneReady ? '▶ Start bowling' : '▶ Start with keyboard';
+  $('btnStart').disabled = !G;
+  $('btnNewGame').classList.toggle('hidden', !mid);
+  $('startHint').classList.toggle('hidden', net.phoneReady);
+}
+
+function renderBest() {
+  const rows = [...net.conn.db.bowlScore.iter()].sort((a, b) => b.score - a.score || (a.at.microsSinceUnixEpoch < b.at.microsSinceUnixEpoch ? -1 : 1)).slice(0, 7);
+  $('bestList').innerHTML = rows.length
+    ? rows.map(r => `<li><span class="who"><span class="line"><b>${esc(r.name)}</b></span><i class="bowl-x">${r.strikes} strike${r.strikes === 1 ? '' : 's'} · ${r.spares} spare${r.spares === 1 ? '' : 's'}</i></span><b class="score">${r.score}</b></li>`).join('')
+    : '<li class="hint">No games yet. Be the first!</li>';
+  const best = rows[0];
+  $('bestChip').textContent = best ? `🏆 ${best.score} · ${best.name}` : '🏆 No games yet';
+}
+
+// ---------- scorecard ----------
+function renderCard() {
+  const st = G ? bowlState(G.rolls) : bowlState([]);
+  const cur = st.done ? -1 : st.frame;
+  const frames = st.frames.map((f, i) => {
+    const marks = frameMarks(f, i === 9);
+    const boxes = (i === 9 ? [0, 1, 2] : [0, 1]).map(k => `<i class="${marks[k] === 'X' ? 'x' : marks[k] === '/' ? 'sp' : ''}">${marks[k] ?? ''}</i>`).join('');
+    return `<div class="frame ${i === cur ? 'cur' : ''} ${i === 9 ? 'tenth' : ''}"><span class="fn">${i + 1}</span><div class="balls">${boxes}</div><b>${f.total ?? ''}</b></div>`;
+  }).join('');
+  $('scorecard').innerHTML = `<div class="sc-name"><span>${esc(G?.name || nameNow())}</span></div>${frames}<div class="sc-total"><span>Total</span><b>${st.score}</b></div>`;
+  $('frameChip').textContent = st.done ? 'FINAL' : `FRAME ${st.frame + 1} · BALL ${st.ball + 1}`;
+}
+
+function renderPinMap(standing, knocked = 0) {
+  // Drawn from the bowler's view: pin 1 at the bottom, back row (7–10) on top.
+  const rows = [[6, 7, 8, 9], [3, 4, 5], [1, 2], [0]];
+  $('pinMap').innerHTML = rows.map(r => `<div>${r.map(i => `<i class="${standing & (1 << i) ? 'up' : knocked & (1 << i) ? 'hit' : ''}"></i>`).join('')}</div>`).join('');
+}
+
+// ---------- flow ----------
+function startPlay() {
+  initAudioSafe(); sfx.ui();
+  if (!G) return;
+  const st = bowlState(G.rolls);
+  if (st.done) { act('bowlNew'); game.pendingSeq = G.rollSeq + 1; }
+  enterAim(st.done ? FULL_RACK : G.standing, true);
+  $('lobby').classList.remove('show');
+  $('hud').classList.remove('hidden');
+  $('endCard').classList.add('hidden');
+}
+function toLobby() {
+  game.state = 'lobby'; game.charging = false;
+  $('lobby').classList.add('show');
+  $('hud').classList.add('hidden');
+  $('endCard').classList.add('hidden');
+  world.guide.group.visible = false;
+}
+
+/** Ball in hand at the foul line, rack as the server holds it. */
+function enterAim(standing, rebuild) {
+  if (rebuild || standingMask(lane) !== standing) {
+    const fresh = standing === FULL_RACK && standingMask(lane) !== FULL_RACK;
+    lane = createLane(standing);
+    if (fresh) for (const p of lane.pins) p.drop = 0.55;
+  }
+  lane.ball.live = false; lane.ball.gone = false;
+  Object.assign(lane.ball, { x: 0, z: RELEASE_Z + 0.25, y: BALL_R, vx: 0, vz: 0 });
+  game.state = 'aim'; game.t = 0; game.standingBefore = standing;
+  world.guide.group.visible = true;
+  renderPinMap(standing);
+  renderCard();
+}
+
+function bowl(power, aim, spin) {
+  if (game.state !== 'aim') return;
+  initAudioSafe();
+  game.lastPower = power;
+  launch(lane, { power, aim, spin });
+  game.state = 'rolling'; game.t = 0;
+  game.lastSpeed = speedOf(power);
+  world.guide.group.visible = false;
+  sfx.swoosh();
+  sfx.rumble(Math.abs(HEAD_Z) / game.lastSpeed + 0.3);
+  $('powerLabel').textContent = `⚡ ${Math.round(game.lastSpeed * 3.6)} km/h`;
+  $('powerFill').style.width = `${clamp(power / 1.2, 0, 1) * 100}%`;
+}
+
+function onPhone(e) {
+  if (e.kind === 'aim') { game.aim = clamp(e.aim, -1, 1); game.spin = clamp(e.spin, -1, 1); game.usedKeys = false; return; }
+  if (e.kind !== 'roll') return;
+  game.aim = clamp(e.aim, -1, 1); game.spin = clamp(e.spin, -1, 1);
+  if (game.state === 'lobby') return startPlay();
+  if (game.state === 'over') return playAgain();
+  if (game.state === 'aim') { game.aimShown = game.aim; game.spinShown = game.spin; bowl(clamp(e.power, 0, 1.2), game.aim, game.spin); }
+}
+
+/** Pins have settled: tell the database which ones fell, call it, then sweep. */
+function countPins() {
+  const knocked = knockedMask(lane, game.standingBefore);
+  const left = game.standingBefore & ~knocked;
+  const n = pinCount(knocked);
+  const prev = G ? [...G.rolls] : [];
+  const call_ = callRoll(prev, n);
+  const after = bowlState([...prev, n]);
+  game.nextFresh = after.done || after.fresh;
+  if (G) { game.pendingSeq = G.rollSeq + 1; act('bowlRoll', { knocked }); }
+  renderPinMap(left, knocked);
+
+  if (call_ === 'strike') {
+    const streak = countStreak([...prev, n]);
+    callout(streak >= 3 ? (streak === 3 ? 'TURKEY!' : `${streak} IN A ROW!`) : streak === 2 ? 'DOUBLE!' : 'STRIKE!', '#ffc61a', streak >= 2 ? '🔥 Keep it rolling' : '🎳 All ten down');
+    world.confetti.burst(new THREE.Vector3(0, 0.4, HEAD_Z - 0.3), 1.2); world.flash(1.4);
+    sfx.strike(); sfx.cheer(0.8);
+  } else if (call_ === 'spare') {
+    callout('SPARE!', '#35c9a5', 'Picked it up 👌');
+    world.confetti.burst(new THREE.Vector3(0, 0.4, HEAD_Z - 0.3), 0.7); world.flash(0.8);
+    sfx.point(); sfx.cheer(0.4);
+  } else if (call_ === 'gutter') {
+    callout(lane.ball.gutter ? 'GUTTER BALL' : 'MISSED!', '#ffffff', after.done || after.fresh ? '' : 'Shake it off. Pick up the spare!');
+    sfx.lose();
+  } else {
+    const split = !after.fresh && !after.done && isSplit(left);
+    callout(`${n} PIN${n === 1 ? '' : 'S'}`, '#ffffff', split ? '😬 SPLIT!' : after.fresh || after.done ? `${10 - pinCount(left)} down this frame` : `${pinCount(left)} left, go get the spare`);
+  }
+  game.state = 'sweep'; game.t = 0;
+  sfx.sweep();
+}
+
+function countStreak(rolls) {
+  const st = bowlState(rolls);
+  let n = 0;
+  const marks = st.frames.flatMap((f, i) => frameMarks(f, i === 9)).filter(m => m !== '');
+  for (let i = marks.length - 1; i >= 0 && marks[i] === 'X'; i--) n++;
+  return n;
+}
+
+/** The server's scorecard moved on (our ball, or a new game). */
+function onGame() {
+  renderCard();
+  if (game.state === 'over' && G && G.rolls.length === 0) enterAim(FULL_RACK, true), $('endCard').classList.add('hidden');
+}
+
+function finishSweep() {
+  if (!G || G.rollSeq < game.pendingSeq) return false;     // wait for the database to score it
+  const st = bowlState(G.rolls);
+  if (st.done) { showEnd(st); return true; }
+  enterAim(G.standing, false);
+  return true;
+}
+
+function showEnd(st) {
+  game.state = 'over';
+  $('endScore').textContent = st.score;
+  $('endName').textContent = G?.name || nameNow();
+  $('endTitle').textContent = st.score >= 250 ? 'LEGENDARY!' : st.score >= 180 ? 'ON FIRE! 🔥' : st.score >= 120 ? 'NICE GAME!' : st.score >= 70 ? 'GOOD GAME!' : 'GG!';
+  $('endStats').innerHTML = `<span><b>${st.strikes}</b> strike${st.strikes === 1 ? '' : 's'}</span><span><b>${st.spares}</b> spare${st.spares === 1 ? '' : 's'}</span>`;
+  const card = $('endCard');
+  card.classList.remove('hidden', 'go'); void card.offsetWidth; card.classList.add('go');
+  sfx.win();
+  world.confetti.burst(new THREE.Vector3(0, 0.6, HEAD_Z - 0.2), 1.4);
+}
+function playAgain() {
+  initAudioSafe(); sfx.ui();
+  if (!G) return;
+  $('endCard').classList.add('hidden');
+  act('bowlNew');
+  enterAim(FULL_RACK, true);
+}
+
+function callout(text, color, sub = '') {
+  const el = $('bigCallout'), s = $('bigSub');
+  el.textContent = text; el.style.color = color;
+  s.textContent = sub;
+  for (const x of [el, s]) { x.classList.remove('go'); void x.offsetWidth; x.classList.add('go'); }
+}
+
+// ---------- keys ----------
+const keys = new Set();
+window.addEventListener('keydown', e => {
+  initAudioSafe();
+  if (e.target instanceof HTMLInputElement) { if (e.key === 'Enter') e.target.blur(); return; }
+  keys.add(e.key.toLowerCase());
+  if (e.key === ' ') {
+    e.preventDefault();
+    if (game.state === 'lobby') startPlay();
+    else if (game.state === 'over') playAgain();
+    else if (game.state === 'aim' && !game.charging) { game.charging = true; game.power = 0; game.usedKeys = true; renderLobby(); }
+  }
+  if (e.key === 'Enter' && game.state === 'lobby') startPlay();
+  if (e.key === 'Escape' && game.state !== 'lobby') toLobby();
+});
+window.addEventListener('keyup', e => {
+  keys.delete(e.key.toLowerCase());
+  if (e.key === ' ' && game.charging) { game.charging = false; bowl(game.power, game.aim, game.spin); }
+});
+window.addEventListener('blur', () => { keys.clear(); game.charging = false; });
+
+function keyInput(dt) {
+  if (game.state !== 'aim') return;
+  const ax = (keys.has('arrowright') ? 1 : 0) - (keys.has('arrowleft') ? 1 : 0);
+  const sx = (keys.has('d') ? 1 : 0) - (keys.has('a') ? 1 : 0);
+  if (ax || sx) game.usedKeys = true;
+  game.aim = clamp(game.aim + ax * dt * 0.9, -1, 1);
+  game.spin = clamp(game.spin + sx * dt * 1.2, -1, 1);
+  if (game.charging) game.power = Math.min(1.2, game.power + dt * 1.1);
+}
+
+// ---------- name, buttons ----------
+const nameNow = () => $('nameInput').value.trim() || 'Bowler';
+$('nameInput').value = (() => { try { return localStorage.getItem('racket.name') || ''; } catch { return ''; } })() || 'Bowler';
+$('nameInput').addEventListener('change', () => {
+  try { localStorage.setItem('racket.name', nameNow()); } catch { /* storage unavailable */ }
+  act('setName', { name: nameNow() });
+  renderCard();
+});
+$('btnStart').addEventListener('click', startPlay);
+$('btnNewGame').addEventListener('click', () => { act('bowlNew'); if (G) game.pendingSeq = G.rollSeq + 1; startPlayFresh(); });
+function startPlayFresh() { initAudioSafe(); sfx.ui(); enterAim(FULL_RACK, true); $('lobby').classList.remove('show'); $('hud').classList.remove('hidden'); }
+$('btnHome').addEventListener('click', () => { sfx.ui(); toLobby(); });
+$('btnAgain').addEventListener('click', playAgain);
+$('btnEndLobby').addEventListener('click', () => { sfx.ui(); toLobby(); });
+for (const a of document.querySelectorAll('a[href="/"]')) a.addEventListener('click', () => act('leaveMatch'));
+window.addEventListener('pointerdown', initAudioSafe, { once: true });
+function initAudioSafe() { try { initAudio(); } catch { /* audio unavailable */ } }
+
+// ---------- main loop ----------
+const clock = new THREE.Clock();
+let elapsed = 0, acc = 0, previewKey = '', perfT = 0, perfN = 0, renderScale = Math.min(window.devicePixelRatio, 1.5);
+const camPos = new THREE.Vector3(0, 1.6, 3.4), camLook = new THREE.Vector3(0, 0.3, -12);
+const camTarget = new THREE.Vector3(), lookTarget = new THREE.Vector3();
+let soundBudget = 0;
+
+function handleSounds(events, vol) {
+  let pinPow = 0, clacks = 0, thuds = 0;
+  for (const e of events) {
+    if (e.type === 'ball-pin' || e.type === 'pin') pinPow = Math.max(pinPow, e.power);
+    else if (e.type === 'clack' || e.type === 'kick') clacks = Math.max(clacks, e.power);
+    else if (e.type === 'thud') thuds++;
+    else if (e.type === 'gutter' && vol === 1) sfx.gutter();
+  }
+  if (soundBudget > 0) return;
+  if (pinPow > 0.05) { sfx.pins(pinPow, vol); soundBudget = 0.12; }
+  else if (clacks > 0.05) { sfx.clack(clacks, vol); soundBudget = 0.04; }
+  else if (thuds) { sfx.thud(vol); soundBudget = 0.05; }
+}
+
+function stepNeighbours(dt) {
+  for (const n of neighbours) {
+    const L = n.lane;
+    if (L.ball.live && !L.ball.gone) {
+      acc2(L, dt, 0.18);
+    } else if (L.ball.live && L.ball.gone) {
+      acc2(L, dt, 0.18);
+      if (settled(L)) { n.done += dt; if (n.done > 1.6) { n.lane = createLane(FULL_RACK); for (const p of n.lane.pins) p.drop = 0.55; n.lane.ball.gone = true; n.wait = 6 + Math.random() * 9; n.done = 0; } }
+    } else if ((n.wait -= dt) <= 0) {
+      launch(L, { power: 0.5 + Math.random() * 0.6, aim: (Math.random() - 0.5) * 0.9, spin: (Math.random() - 0.3) * 1.2 });
+    }
+  }
+}
+function acc2(L, dt, vol) {
+  const ev = [];
+  for (let k = 0, n = Math.round(dt / STEP); k < n; k++) stepLane(L, STEP, ev);
+  if (ev.length) handleSounds(ev, vol);
+}
+
+function update(dt) {
+  keyInput(dt);
+  soundBudget -= dt;
+  const k = Math.min(1, dt * 8);
+  game.aimShown += (game.aim - game.aimShown) * k;
+  game.spinShown += (game.spin - game.spinShown) * k;
+  game.t += dt;
+
+  // Pins dropping into place after a reset
+  for (const p of lane.pins) if (p.drop) p.drop = Math.max(0, p.drop - dt * 1.4);
+  for (const n of neighbours) for (const p of n.lane.pins) if (p.drop) p.drop = Math.max(0, p.drop - dt * 1.4);
+
+  if (game.state === 'aim') {
+    const key = `${game.aimShown.toFixed(2)}|${game.spinShown.toFixed(2)}`;
+    if (key !== previewKey) { previewKey = key; const p = previewPath(game.aimShown, game.spinShown, game.lastPower); world.guide.set(p.pts, p.gutter); }
+    lane.ball.y = BALL_R + 0.22 + Math.sin(elapsed * 2.4) * 0.015;
+    lane.ball.x = 0;
+  }
+  if (game.state === 'rolling') {
+    acc += dt;
+    const ev = [];
+    while (acc >= STEP) { acc -= STEP; stepLane(lane, STEP, ev); }
+    handleSounds(ev, 1);
+    if (game.t < 0.18) lane.ball.y = BALL_R + 0.22 * (1 - game.t / 0.18);
+    // Give up waiting for the last wobbles after a while
+    if ((settled(lane) && game.t > 1) || game.t > 9) { game.state = 'count'; game.t = 0; }
+  } else if (game.state === 'count') {
+    acc = 0;
+    const ev = [];
+    for (let i = 0; i < Math.round(dt / STEP); i++) stepLane(lane, STEP, ev);
+    if (game.t > 0.55) countPins();
+  } else if (game.state === 'sweep') updateSweep();
+
+  stepNeighbours(dt);
+
+  // HUD meters
+  $('aimDot').style.left = `${50 + game.aimShown * 46}%`;
+  const h = $('hookFill');
+  h.style.left = `${50 + Math.min(0, game.spinShown) * 50}%`; h.style.width = `${Math.abs(game.spinShown) * 50}%`;
+  if (game.state === 'aim') {
+    $('powerLabel').textContent = game.charging ? '⚡ Power' : net.phoneReady ? '📱 Swing!' : '⚡ Hold Space';
+    $('powerFill').style.width = `${(game.charging ? game.power / 1.2 : 0) * 100}%`;
+  }
+}
+
+// Pinsetter: the bar drops, standing pins are lifted, the deadwood is swept into the pit, the rack comes back.
+function updateSweep() {
+  const t = game.t, bar = world.sweep, top = 0.95, low = 0.07, z0 = HEAD_Z + 0.45, z1 = HEAD_Z - 1.15;
+  const ease = x => x * x * (3 - 2 * x), seg = (a, b) => ease(clamp((t - a) / (b - a), 0, 1));
+  const keep = !game.nextFresh;
+  bar.position.y = top + (low - top) * seg(0, 0.35) - (low - top) * seg(1.25, 1.55);
+  bar.position.z = z0 + (z1 - z0) * seg(0.4, 0.9) - (z1 - z0) * seg(0.95, 1.25);
+  const lift = keep ? 0.3 * seg(0.05, 0.35) * (1 - seg(1.0, 1.3)) : 0;
+  sweepLift = lift;
+  for (const p of lane.pins) {
+    if (p.state === 'gone' || (keep && p.state === 'standing')) continue;
+    if (bar.position.y < 0.2 && p.z > bar.position.z - 0.08) {
+      p.z = bar.position.z - 0.08; p.vx = p.vz = 0;
+      if (p.z < HEAD_Z - 1.0) p.state = 'gone';
+    }
+  }
+  if (t > 1.6 && finishSweep()) { sweepLift = 0; bar.position.set(0, top, z0); }
+}
+let sweepLift = 0;
+
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  elapsed += dt;
+  update(dt);
+
+  world.drawLane(mainView, lane, dt, elapsed, { lift: sweepLift, hideBall: game.state === 'lobby' });
+  for (const n of neighbours) world.drawLane(n.view, n.lane, dt, elapsed, { hideBall: !n.lane.ball.live });
+  world.update(elapsed, dt);
+
+  // Camera: behind the ball in hand, chases it down the lane, then holds on the pins.
+  const b = lane.ball;
+  if (game.state === 'lobby') {
+    camTarget.set(Math.sin(elapsed * 0.18) * 0.9, 1.5, 3.2); lookTarget.set(Math.sin(elapsed * 0.18) * 0.3, 0.35, -14);
+  } else if (game.state === 'aim' || game.state === 'over') {
+    camTarget.set(game.aimShown * 0.08, 1.15, 2.6); lookTarget.set(game.aimShown * 0.6, -0.2, -10);
+  } else if (game.state === 'rolling' && !b.gone && b.z > HEAD_Z + 4.6) {
+    camTarget.set(b.x * 0.5, 0.75 + Math.max(0, b.z + 6) * 0.03, b.z + 2.0); lookTarget.set(b.x * 0.5, 0.12, b.z - 7);
+  } else {
+    camTarget.set(0, 1.0, HEAD_Z + 3.7); lookTarget.set(0, 0.08, HEAD_Z - 0.4);
+  }
+  const ck = Math.min(1, dt * (game.state === 'rolling' ? 5 : 2.6));
+  camPos.lerp(camTarget, ck); camLook.lerp(lookTarget, ck);
+  world.camera.position.copy(camPos);
+  world.camera.lookAt(camLook);
+
+  perfT += dt; perfN++;
+  if (perfT > 1.5) {
+    if (perfT / perfN > 1 / 48 && renderScale > 0.75) { renderScale -= 0.25; world.setPixelRatio(renderScale); }
+    perfT = perfN = 0;
+  }
+  world.render();
+}
+renderPinMap(FULL_RACK);
+renderCard();
+world.guide.group.visible = false;
+requestAnimationFrame(frame);
+
+// Test hook
+window.__bowl = { game, net, get lane() { return lane; }, get G() { return G; }, bowl, startPlay, onPhone };

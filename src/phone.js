@@ -2,6 +2,7 @@
 // detects swings from motion sensors and sends them through reducers. Feedback (hits, score,
 // secret moves, stamina) arrives through subscriptions, views and event tables.
 import { connect, call, tables } from './stdb.js';
+import { bowlState, callRoll } from '../spacetimedb/src/bowling.ts';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -9,6 +10,8 @@ const first = it => { for (const x of it) return x; return undefined; };
 const params = new URLSearchParams(location.search);
 const code = (params.get('code') || '').toUpperCase();
 const seat = Number(params.get('seat') || 0);
+// Bowling lane (bowling.html): the phone is the ball. Turn to aim, tilt to hook, swing underhand to bowl.
+let bowlMode = params.get('game') === 'bowl';
 
 // ---------- tuning ----------
 const DEFAULT_CAL = { gentle: 1.6, hard: 3.6 };   // swing intensity units (~1 = 360°/s of wrist rotation)
@@ -17,10 +20,16 @@ const COOLDOWN_MS = 350;
 const AIM_RANGE_DEG = 32;                          // phone yaw that maps to full left/right aim
 const DIR_DEG = 18;                                // pitch change during a swing that counts as up/down
 const TWIST_RATIO = 0.6;                           // share of rotation around the phone's long axis that counts as a slice
+const HOOK_RANGE_DEG = 35;                         // bowling: wrist tilt that maps to full hook
+const HOOK_DEAD_DEG = 5;
+const BACKSWING_MS = 750;                          // bowling: a lone "down" swing still bowls after this long
 
 const cal = { ...DEFAULT_CAL, ...loadCal() };
 let center = null;           // heading (deg) when "Set center" was tapped
 let heading = null, pitch = 0, aim = 0;
+let tilt = 0, tiltCenter = 0, spin = 0;     // bowling: wrist tilt around the phone's long axis → hook
+let steadyAim = 0, steadySpin = 0;          // aim and hook held while the phone is still (a swing smears both)
+let pendingRoll = null, lastRollAt = 0;
 const pitchLog = [];         // recent { t, pitch } samples, to see which way a swing travelled
 let stage = 'connect';       // connect | motion | center | gentle | hard | play
 let calPeaks = [];
@@ -31,7 +40,7 @@ function loadCal() { try { return JSON.parse(localStorage.getItem('racket.cal'))
 function saveCal() { try { localStorage.setItem('racket.cal', JSON.stringify({ gentle: cal.gentle, hard: cal.hard })); } catch { /* storage unavailable */ } }
 
 // ---------- screens ----------
-const STEPS = ['s-connect', 's-motion', 's-center', 's-swing', 's-play'];
+const STEPS = ['s-connect', 's-motion', 's-center', 's-swing', 's-play', 's-bowl'];
 function show(id) { for (const s of STEPS) $(s).classList.toggle('hidden', s !== id); }
 
 // ---------- SpacetimeDB ----------
@@ -42,9 +51,11 @@ const act = (name, args = {}) => call(conn, name, args, msg => {
 });
 
 connect({
-  subs: [tables.match, tables.myShot, tables.myDevice, tables.mySecret, tables.myStamina, tables.myRead, tables.hitEvent, tables.rallyEvent, tables.readEvent, tables.noticeEvent],
+  subs: [tables.match, tables.myShot, tables.myDevice, tables.mySecret, tables.myStamina, tables.myRead, tables.hitEvent, tables.rallyEvent, tables.readEvent, tables.noticeEvent, tables.bowlGame],
   wire(c) {
     conn = c;
+    c.db.bowlGame.onInsert(refresh);
+    c.db.bowlGame.onUpdate?.((_c, _o, row) => { if (row.matchId === matchId) onBowlGame(row); refresh(); });
     for (const t of ['match', 'myShot', 'myDevice', 'mySecret', 'myStamina', 'myRead']) {
       c.db[t].onInsert(refresh); c.db[t].onDelete(refresh); c.db[t].onUpdate?.(refresh);
     }
@@ -88,6 +99,8 @@ function refresh() {
   paired = nowPaired;
   matchId = d?.matchId || 0;
   const m = matchId ? [...conn.db.match.iter()].find(x => x.id === matchId) : null;
+  if (m && m.mode === 'bowl' && !bowlMode) { bowlMode = true; bowlTexts(); if (stage === 'play') show('s-bowl'); }
+  if (bowlMode) return bowlRefresh();
   if (m) {
     const me = seat === 0 ? m.scoreA : m.scoreB, op = seat === 0 ? m.scoreB : m.scoreA;
     $('pScore').textContent = `${me} – ${op}`;
@@ -119,6 +132,67 @@ function refresh() {
   const st = first(conn.db.myStamina.iter());
   $('pStamina').style.width = `${st ? st.value : 100}%`;
   $('pStamina').classList.toggle('low', !!st && st.value < 30);
+}
+
+// ---------- bowling ----------
+let seenRolls = null, msgUntil = 0;
+function bowlTexts() {
+  document.querySelector('#s-motion h2').textContent = 'Your phone is the ball';
+  document.querySelector('#s-motion .illus').textContent = '🎳';
+  document.querySelector('#s-center p').innerHTML = 'Hold the phone in your bowling hand, <b>screen up, top pointing at the laptop</b>. Then tap the button.';
+  document.querySelector('#s-swing .illus').textContent = '🎳';
+}
+function bowlGame() { return matchId ? conn?.db.bowlGame.matchId.find(matchId) : null; }
+function bowlRefresh() {
+  const g = bowlGame();
+  if (!g) return;
+  const st = bowlState(g.rolls);
+  $('bScore').textContent = st.done ? `Final · ${st.score}` : `Frame ${st.frame + 1} · ${st.score}`;
+  if (seenRolls === null) seenRolls = [...g.rolls];
+  if (performance.now() < msgUntil) return;
+  if (stage !== 'play') setBowlPrompt('Finish calibrating first');
+  else if (st.done) setBowlPrompt(`🏁 ${st.score}! Swing to bowl again`);
+  else setBowlPrompt(`Frame ${st.frame + 1} · Ball ${st.ball + 1}: swing to bowl!`);
+}
+function onBowlGame(g) {
+  const prev = seenRolls || [];
+  seenRolls = [...g.rolls];
+  if (g.rolls.length !== prev.length + 1) { msgUntil = 0; return; }
+  const pins = g.rolls[g.rolls.length - 1];
+  const c = callRoll(prev, pins);
+  const text = c === 'strike' ? '🎳 STRIKE!' : c === 'spare' ? '✨ SPARE!' : c === 'gutter' ? 'Gutter ball 😬' : `${pins} pin${pins === 1 ? '' : 's'}`;
+  $('bLast').textContent = text;
+  $('bGrade').textContent = '';
+  setBowlPrompt(text);
+  msgUntil = performance.now() + 2600;
+  setTimeout(bowlRefresh, 2700);
+  buzz(c === 'strike' ? [60, 40, 60, 40, 160] : c === 'spare' ? [50, 40, 90] : c === 'gutter' ? 200 : 40);
+}
+function setBowlPrompt(t) { $('bPrompt').textContent = t; }
+function sendRoll(power, rollAim, rollSpin, tap = false) {
+  if (performance.now() - lastRollAt < 2200) return;
+  lastRollAt = performance.now();
+  act('phoneBowl', { kind: 'roll', power: +clamp(power, 0, 1.2).toFixed(3), aim: +rollAim.toFixed(3), spin: +rollSpin.toFixed(3), tap });
+  const pad = $('bPad');
+  pad.classList.remove('hit'); void pad.offsetWidth; pad.classList.add('hit');
+  setTimeout(() => pad.classList.remove('hit'), 520);
+  $('bLast').textContent = 'Rolling…';
+  $('bGrade').textContent = `${Math.round((5.4 + clamp(power, 0, 1.2) * 3.4) * 3.6)} km/h${Math.abs(rollSpin) > 0.08 ? ` · hook ${rollSpin > 0 ? '→' : '←'}` : ''}`;
+  setBowlPrompt('🎳 Rolling…');
+  msgUntil = performance.now() + 4000;
+  buzz(30);
+}
+// A bowling swing is a backswing and then the throw. The backswing points the top of the phone down,
+// so a "down" swing waits briefly: if the throw follows, the throw counts; if not, it bowls by itself.
+function bowlSwing(peak, gesture) {
+  const calibrating = stage === 'gentle' || stage === 'hard';
+  const fire = p => (calibrating ? recordCalibration(p) : sendRoll(powerFromPeak(p), steadyAim, steadySpin));
+  if (pendingRoll) { clearTimeout(pendingRoll.timer); pendingRoll = null; }
+  if (gesture.dir === 'down') {
+    pendingRoll = { timer: setTimeout(() => { pendingRoll = null; fire(peak); }, BACKSWING_MS) };
+    return;
+  }
+  fire(peak);
 }
 
 function feedback(hit, shot, grade, smash) {
@@ -169,6 +243,10 @@ function onOrientation(e) {
   const x = -cB * sA, y = cA * cB;
   if (Math.hypot(x, y) > 0.2) heading = Math.atan2(x, y) / r;
   pitch = Math.asin(clamp(sB, -1, 1)) / r;   // how far the top of the phone points up (−90…90), independent of grip
+  // How far the right edge dips (rotation around the phone's long axis): the bowling hook.
+  if (e.gamma != null) tilt = Math.asin(clamp(cB * Math.sin(e.gamma * r), -1, 1)) / r;
+  const dt = tilt - tiltCenter, mag = Math.max(0, Math.abs(dt) - HOOK_DEAD_DEG);
+  spin = clamp(Math.sign(dt) * mag / (HOOK_RANGE_DEG - HOOK_DEAD_DEG), -1, 1);
   const now = performance.now();
   pitchLog.push({ t: now, pitch });
   while (pitchLog.length && now - pitchLog[0].t > 600) pitchLog.shift();
@@ -230,6 +308,7 @@ function powerFromPeak(peak) {
 }
 
 function emitSwing(peak, lagMs, swingAim, gesture = { dir: 'flat', slice: false }) {
+  if (bowlMode && (stage === 'gentle' || stage === 'hard' || (stage === 'play' && performance.now() - playSince > 1500))) return bowlSwing(peak, gesture);
   if (stage === 'gentle' || stage === 'hard') return recordCalibration(peak);
   if (stage !== 'play' || performance.now() - playSince < 1500) return;
   act('phoneSwing', { power: +powerFromPeak(peak).toFixed(3), aim: +swingAim.toFixed(3), lag: Math.round(lagMs), dir: gesture.dir, slice: !!gesture.slice, tap: false });
@@ -240,10 +319,12 @@ function emitSwing(peak, lagMs, swingAim, gesture = { dir: 'flat', slice: false 
 function startSwingStep(kind) {
   stage = kind; calPeaks = [];
   show('s-swing');
-  $('swingTitle').textContent = kind === 'gentle' ? '3 gentle swings' : '3 HARD swings';
-  $('swingText').textContent = kind === 'gentle'
-    ? 'Hold tight! Swing softly, like a delicate drop shot.'
-    : 'Now go big — swing like you\'re smashing! (Hold on tight.)';
+  $('swingTitle').textContent = bowlMode ? (kind === 'gentle' ? '3 gentle rolls' : '3 HARD rolls') : kind === 'gentle' ? '3 gentle swings' : '3 HARD swings';
+  $('swingText').textContent = bowlMode
+    ? (kind === 'gentle' ? 'Hold tight! Swing underhand softly, like a slow spare ball.' : 'Now go big: swing underhand like you\'re going for a strike! (Hold on tight.)')
+    : kind === 'gentle'
+      ? 'Hold tight! Swing softly, like a delicate drop shot.'
+      : 'Now go big — swing like you\'re smashing! (Hold on tight.)';
   updateDots();
   sendStatus();
 }
@@ -261,7 +342,8 @@ function recordCalibration(peak) {
 }
 
 function startPlay() {
-  stage = 'play'; show('s-play'); playSince = performance.now();
+  stage = 'play'; show(bowlMode ? 's-bowl' : 's-play'); playSince = performance.now();
+  $('bHint').textContent = tapMode ? 'Swipe up to bowl: start left/right to aim, curve the swipe to hook' : 'Tilt to hook, then swing underhand';
   $('tapHint').textContent = tapMode ? 'Tap: top = smash · middle = clear · bottom = lift · left/right = aim' : 'Swing your phone — or tap here';
   sendStatus();
   navigator.wakeLock?.request('screen').catch(() => {});
@@ -271,7 +353,19 @@ function startPlay() {
 let sentAim = 0, sentPitch = 0, lastAimSend = 0;
 setInterval(() => {
   const now = performance.now();
-  if (paired && stage === 'play' && !tapMode && now - lastAimSend > 160 && (Math.abs(aim - sentAim) > 0.04 || Math.abs(pitch - sentPitch) > 8)) {
+  // Bowling: aim and hook only follow the phone while it's held still, so the swing itself can't smear them.
+  // Only while level, too: at the top of the backswing the phone pauses pointing down, and that's no aim.
+  if (meterVal < Math.max(0.35, cal.gentle * 0.3) && Math.abs(pitch) < 35 && !pendingRoll) { steadyAim = aim; steadySpin = spin; }
+  if (bowlMode) {
+    if (paired && stage === 'play' && !tapMode && now - lastAimSend > 150 && (Math.abs(steadyAim - sentAim) > 0.03 || Math.abs(steadySpin - sentPitch) > 0.03)) {
+      lastAimSend = now; sentAim = steadyAim; sentPitch = steadySpin;
+      act('phoneBowl', { kind: 'aim', power: 0, aim: +steadyAim.toFixed(3), spin: +steadySpin.toFixed(3), tap: false });
+    }
+    $('bAimDot').style.left = `${50 + steadyAim * 45}%`;
+    $('bHookDot').style.left = `${50 + steadySpin * 45}%`;
+    $('bBall').style.transform = `rotate(${steadySpin * 50}deg)`;
+    $('bMeter').style.width = `${Math.min(100, (meterVal / Math.max(cal.hard, 2)) * 100)}%`;
+  } else if (paired && stage === 'play' && !tapMode && now - lastAimSend > 160 && (Math.abs(aim - sentAim) > 0.04 || Math.abs(pitch - sentPitch) > 8)) {
     lastAimSend = now; sentAim = aim; sentPitch = pitch;
     act('phoneAim', { aim: +aim.toFixed(3), pitch: Math.round(pitch) });
   }
@@ -294,14 +388,31 @@ $('pad').addEventListener('pointerdown', e => {
   aim = tapAim;
 });
 
+// Bowling tap mode: swipe up to bowl. Where it starts = aim, sideways drift = hook, speed = power.
+let swipe = null;
+$('bPad').addEventListener('pointerdown', e => {
+  if (stage !== 'play') return;
+  swipe = { x: e.clientX, y: e.clientY, t: performance.now() };
+});
+$('bPad').addEventListener('pointerup', e => {
+  if (!swipe || stage !== 'play') return;
+  const r = e.currentTarget.getBoundingClientRect(), s = swipe; swipe = null;
+  const rollAim = clamp(((s.x - r.left) / r.width - 0.5) * 2.2, -1, 1);
+  const dy = s.y - e.clientY, ms = Math.max(60, performance.now() - s.t);
+  if (dy < 30) return sendRoll(0.65, rollAim, tapMode ? 0 : steadySpin, true);
+  const rollSpin = clamp(((e.clientX - s.x) / r.width) * 2.5, -1, 1);
+  sendRoll(clamp((dy / ms) * 0.55, 0.15, 1.2), rollAim, tapMode ? rollSpin : steadySpin, true);
+});
+
 // ---------- buttons ----------
 $('btnMotion').addEventListener('click', enableMotion);
 $('btnTapMode').addEventListener('click', () => { tapMode = true; startPlay(); });
 $('btnCenter').addEventListener('click', () => {
-  center = heading ?? 0; aim = 0; buzz(20);
+  center = heading ?? 0; aim = 0; tiltCenter = tilt; buzz(20);
   startSwingStep('gentle');
 });
-$('btnUseSaved').addEventListener('click', () => { center = heading ?? 0; aim = 0; startPlay(); });
+$('btnUseSaved').addEventListener('click', () => { center = heading ?? 0; aim = 0; tiltCenter = tilt; startPlay(); });
+$('btnRecalB').addEventListener('click', () => $('btnRecal').click());
 $('btnRecal').addEventListener('click', () => {
   if (tapMode) { tapMode = false; stage = 'motion'; show('s-motion'); return; }
   stage = 'center'; show('s-center'); sendStatus();
@@ -324,4 +435,5 @@ for (const b of document.querySelectorAll('#pSecrets button')) {
 }
 
 // Test hook: lets automated tests drive the swing detector without real sensors.
-window.__phone = { feed, gestureOf, onMotion, onOrientation, setAim: a => { aim = a; }, cal, get stage() { return stage; }, startPlay, startSwingStep };
+window.__phone = { feed, gestureOf, onMotion, onOrientation, setAim: a => { aim = a; }, cal, get stage() { return stage; }, startPlay, startSwingStep, get spin() { return spin; }, get steady() { return { aim: steadyAim, spin: steadySpin }; } };
+if (bowlMode) bowlTexts();

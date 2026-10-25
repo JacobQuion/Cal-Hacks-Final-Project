@@ -6,12 +6,15 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import BowlNewReducer from "../bowl_new_reducer";
+import BowlRollReducer from "../bowl_roll_reducer";
 import CreateMatchReducer from "../create_match_reducer";
 import JoinMatchReducer from "../join_match_reducer";
 import LeaveMatchReducer from "../leave_match_reducer";
 import LeaveQueueReducer from "../leave_queue_reducer";
 import PairPhoneReducer from "../pair_phone_reducer";
 import PhoneAimReducer from "../phone_aim_reducer";
+import PhoneBowlReducer from "../phone_bowl_reducer";
 import PhoneStatusReducer from "../phone_status_reducer";
 import PhoneSwingReducer from "../phone_swing_reducer";
 import PickReadReducer from "../pick_read_reducer";
@@ -27,14 +30,18 @@ import SetNameReducer from "../set_name_reducer";
 import SetPausedReducer from "../set_paused_reducer";
 import SetReadyReducer from "../set_ready_reducer";
 import SetScoutReducer from "../set_scout_reducer";
+import StartBowlingReducer from "../start_bowling_reducer";
 import SwingReducer from "../swing_reducer";
 
+export type BowlNewParams = __Infer<typeof BowlNewReducer>;
+export type BowlRollParams = __Infer<typeof BowlRollReducer>;
 export type CreateMatchParams = __Infer<typeof CreateMatchReducer>;
 export type JoinMatchParams = __Infer<typeof JoinMatchReducer>;
 export type LeaveMatchParams = __Infer<typeof LeaveMatchReducer>;
 export type LeaveQueueParams = __Infer<typeof LeaveQueueReducer>;
 export type PairPhoneParams = __Infer<typeof PairPhoneReducer>;
 export type PhoneAimParams = __Infer<typeof PhoneAimReducer>;
+export type PhoneBowlParams = __Infer<typeof PhoneBowlReducer>;
 export type PhoneStatusParams = __Infer<typeof PhoneStatusReducer>;
 export type PhoneSwingParams = __Infer<typeof PhoneSwingReducer>;
 export type PickReadParams = __Infer<typeof PickReadReducer>;
@@ -50,5 +57,6 @@ export type SetNameParams = __Infer<typeof SetNameReducer>;
 export type SetPausedParams = __Infer<typeof SetPausedReducer>;
 export type SetReadyParams = __Infer<typeof SetReadyReducer>;
 export type SetScoutParams = __Infer<typeof SetScoutReducer>;
+export type StartBowlingParams = __Infer<typeof StartBowlingReducer>;
 export type SwingParams = __Infer<typeof SwingReducer>;
 

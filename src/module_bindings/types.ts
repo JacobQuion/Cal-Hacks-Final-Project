@@ -18,6 +18,38 @@ export const AimEvent = __t.object("AimEvent", {
 });
 export type AimEvent = __Infer<typeof AimEvent>;
 
+export const BowlGame = __t.object("BowlGame", {
+  matchId: __t.u32(),
+  name: __t.string(),
+  rolls: __t.byteArray(),
+  standing: __t.u16(),
+  score: __t.u32(),
+  done: __t.bool(),
+  gameNo: __t.u32(),
+  rollSeq: __t.u32(),
+});
+export type BowlGame = __Infer<typeof BowlGame>;
+
+export const BowlInput = __t.object("BowlInput", {
+  matchId: __t.u32(),
+  kind: __t.string(),
+  power: __t.f32(),
+  aim: __t.f32(),
+  spin: __t.f32(),
+  tap: __t.bool(),
+});
+export type BowlInput = __Infer<typeof BowlInput>;
+
+export const BowlScore = __t.object("BowlScore", {
+  id: __t.u32(),
+  name: __t.string(),
+  score: __t.u32(),
+  strikes: __t.u8(),
+  spares: __t.u8(),
+  at: __t.timestamp(),
+});
+export type BowlScore = __Infer<typeof BowlScore>;
+
 export const Condition = __t.object("Condition", {});
 export type Condition = __Infer<typeof Condition>;
 

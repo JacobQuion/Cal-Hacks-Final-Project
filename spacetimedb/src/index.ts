@@ -12,6 +12,7 @@ import {
   LEVELS, SPECIALS, TIME_SCALE, Shuttle, aiDecide, flightOf, makeServe, makeShot, predictContact,
   serveSpots, sideOf, gradeTiming, crossingOf, HALF_L, type Gesture, type Special,
 } from './core';
+import { FULL_RACK, bowlState, pinCount } from './bowling';
 
 // ───────────────────────── public tables ─────────────────────────
 
@@ -302,6 +303,44 @@ const rtcFrame = table(
   }
 );
 
+// ───────────────────────── bowling ─────────────────────────
+
+// One solo bowling game per bowling "match" (mode = bowl). The laptop's lane physics reports which
+// pins fell; the database checks them against the rack it holds and keeps score (strikes and spares
+// wait for their bonus balls), so the laptop, the phone and anyone else read the same scorecard.
+const bowlGame = table(
+  { name: 'bowl_game', public: true },
+  {
+    matchId: t.u32().primaryKey(),
+    name: t.string(),
+    rolls: t.array(t.u8()),      // pins down per ball, in order
+    standing: t.u16(),           // rack for the next ball (bit i = pin i+1)
+    score: t.u32(),
+    done: t.bool(),
+    gameNo: t.u32(),
+    rollSeq: t.u32(),            // bumps on every ball
+  }
+);
+
+// Finished bowling games, best first on the bowling page.
+const bowlScore = table(
+  { name: 'bowl_score', public: true },
+  {
+    id: t.u32().primaryKey().autoInc(),
+    name: t.string(),
+    score: t.u32(),
+    strikes: t.u8(),
+    spares: t.u8(),
+    at: t.timestamp(),
+  }
+);
+
+// Phone → its laptop: live aim + hook (kind = aim) or a bowled ball (kind = roll).
+const bowlInput = table(
+  { name: 'bowl_input', public: true, event: true },
+  { matchId: t.u32(), kind: t.string(), power: t.f32(), aim: t.f32(), spin: t.f32(), tap: t.bool() }
+);
+
 // ───────────────────────── schedule table ─────────────────────────
 
 // One-shot timers: start, serve_ready, land, ai_hit, ai_serve, idle_serve
@@ -321,7 +360,7 @@ const spacetimedb = schema({
   device, match, shotFeed, hallOfFame, queue,
   shot, shotLog, secret, stamina, readPick, targetZone, pointLog, loadout,
   swingEvent, aimEvent, hitEvent, rallyEvent, readEvent, noticeEvent,
-  rtcMail, rtcFrame, timer,
+  rtcMail, rtcFrame, timer, bowlGame, bowlScore, bowlInput,
 });
 export default spacetimedb;
 
@@ -899,6 +938,58 @@ export const phoneAim = spacetimedb.reducer({ aim: t.f32(), pitch: t.f32() }, (c
   if (!d || d.kind !== 'phone' || d.matchId === 0) return;
   ctx.db.aimEvent.insert({ matchId: d.matchId, seat: d.seat, aim, pitch });
 });
+
+// ───────────────────────── bowling ─────────────────────────
+
+/** A solo bowling lane: a match (mode = bowl) the phone pairs to like any other, plus its scorecard. */
+export const startBowling = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
+  leaveCurrent(ctx);
+  const n = cleanName(name);
+  const m = blankMatch(ctx, 'bowl', 0);
+  m.laptopA = hex(ctx); m.nameA = n; m.fogEnabled = false;
+  const row = ctx.db.match.insert(m);
+  upsertDevice(ctx, { kind: 'laptop', name: n, matchId: row.id, seat: 0 });
+  ctx.db.bowlGame.insert({ matchId: row.id, name: n, rolls: [], standing: FULL_RACK, score: 0, done: false, gameNo: 1, rollSeq: 0 });
+});
+
+function myBowlGame(ctx: Ctx) {
+  const { m } = myLaptopSeat(ctx);
+  const g = m.mode === 'bowl' ? ctx.db.bowlGame.matchId.find(m.id) : undefined;
+  if (!g) throw new SenderError('Not on a bowling lane');
+  return g;
+}
+
+/** One ball: `knocked` = the pins (bitmask) that went down. Only pins still standing count. */
+export const bowlRoll = spacetimedb.reducer({ knocked: t.u16() }, (ctx, { knocked }) => {
+  const g = myBowlGame(ctx);
+  if (g.done) throw new SenderError('Game over — start a new game');
+  const down = knocked & g.standing;
+  const rolls = [...g.rolls, pinCount(down)];
+  const st = bowlState(rolls);
+  const standing = st.done ? 0 : st.fresh ? FULL_RACK : g.standing & ~down;
+  ctx.db.bowlGame.matchId.update({ ...g, rolls, standing, score: st.score, done: st.done, rollSeq: g.rollSeq + 1 });
+  if (st.done) {
+    ctx.db.bowlScore.insert({ id: 0, name: g.name, score: st.score, strikes: st.strikes, spares: st.spares, at: ctx.timestamp });
+  }
+});
+
+export const bowlNew = spacetimedb.reducer(ctx => {
+  const g = myBowlGame(ctx);
+  const d = ctx.db.device.identity.find(ctx.sender);
+  ctx.db.bowlGame.matchId.update({ ...g, name: d?.name || g.name, rolls: [], standing: FULL_RACK, score: 0, done: false, gameNo: g.gameNo + 1, rollSeq: g.rollSeq + 1 });
+});
+
+export const phoneBowl = spacetimedb.reducer(
+  { kind: t.string(), power: t.f32(), aim: t.f32(), spin: t.f32(), tap: t.bool() },
+  (ctx, a) => {
+    const d = ctx.db.device.identity.find(ctx.sender);
+    if (!d || d.kind !== 'phone' || d.matchId === 0) {
+      if (a.kind === 'aim') return;
+      throw new SenderError('Not a paired phone');
+    }
+    ctx.db.bowlInput.insert({ matchId: d.matchId, ...a });
+  }
+);
 
 /** Video call: pass a WebRTC signaling message to the other laptop of this 1v1. */
 export const rtcSignal = spacetimedb.reducer({ data: t.string() }, (ctx, { data }) => {
