@@ -37,8 +37,7 @@ were hit. Opening developer tools on your laptop shows nothing, because the data
 | **Server-decided shots** | `swing` / `serve` reducers + shared `core.ts` physics | The laptop only reports *how far off its timing was + gesture + power + aim*. The server works out the contact point, stamina, secret move, read bonus and launch vector, then writes the `shot` row. Both screens animate the same flight from it. |
 | **Server-checked timing** | `swing` reducer + `ctx.timestamp` | The server knows when it launched the shuttle and when it reaches the contact point. The laptop's timing must agree with the server clock (allowing for network delay), or the swing is graded on server time. A faked "PERFECT" sent 0.8 s early is rejected. |
 | **Landing & scoring without a game loop** | Schedule table (`timer`, one-shot) | At launch the server simulates the flight once and schedules a `land` timer for the touchdown. One write per hit, no 20 Hz tick. Stale timers are ignored by `shotSeq`. |
-| **NPC opponent** | Scheduled reducers | The AI lives in the database: on launch it predicts the contact, decides the shot and schedules `ai_hit` at contact time plus its timing error. It even uses secret moves. |
-| **Secret moves** (Power / Curve / Feint) | Private `secret` table + `my_secret` view | Armed from the phone or keys 1-2-3. Only your own laptop and phone can see it. The opponent's client never receives it. A feint is announced as a clear/drive while the server plays a drop. |
+| **NPC opponent** | Scheduled reducers | The AI lives in the database: on launch it predicts the contact, decides the shot and schedules `ai_hit` at contact time plus its timing error. |
 | **Hidden stamina** | Private `stamina` table, `my_stamina` + `condition` views | You see your exact bar. The opponent only gets "fresh / tired / exhausted". Below 30, you can't swing at full power (no smash). |
 | **Auto-pause on disconnect** | `clientDisconnected` / `clientConnected` lifecycle reducers | A laptop or paired phone drops → match pauses for everyone. It reconnects with the same identity → resumes and replays the point. |
 | **Reads (shot prediction)** | Private `read_pick` table, `my_read` view, `read_event` | While the opponent is about to hit, guess drop / clear / smash on your phone (or Q/W/E). The guess is never sent to them. It is checked against the *real* shot (a feint can't fool a drop read): right = your next swing is graded one step better, wrong = −5 stamina. `read_event` reveals it afterwards. The NPC reads too. |
@@ -93,7 +92,7 @@ npm run dev
 
 Open <http://localhost:5180>. To try 1v1 on one machine, open a second browser tab: each tab is its
 own identity. Every player swings with a paired phone (there is no keyboard play). Laptop shortcuts:
-1/2/3 secret moves · Q/W/E read · S scouting report · P pause. (`npm run dev:hmr` turns on Vite live reload for development. It is off
+Q/W/E read · S scouting report · P pause. (`npm run dev:hmr` turns on Vite live reload for development. It is off
 by default because a dropped live-reload socket through a tunnel reloads the page mid-match.)
 
 ### Phones and a second laptop
@@ -194,7 +193,7 @@ The database owner can query private tables. Players' clients can't.
 spacetimedb/src/index.ts   module: tables, reducers, views, schedules, lifecycle, RLS
 spacetimedb/src/core.ts    shared physics, shot rules, timing, AI brain
 src/main.js                laptop: rendering, timing judgement, lobby/menus
-src/phone.js               phone controller: sensors, gestures, pairing, secret moves
+src/phone.js               phone controller: sensors, gestures, pairing
 src/stdb.js                connection helper (per-tab identity, auto-reconnect)
 src/video.js               1v1 video call (WebRTC, signaling through SpacetimeDB)
 src/scene.js, src/fx.js    arena, athletes, shuttle, lighting, post-processing, hit effects

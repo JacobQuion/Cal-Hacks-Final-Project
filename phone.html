@@ -68,16 +68,12 @@
         <div class="racket">🏸</div>
         <div class="last" id="pLast"></div>
         <div class="grade" id="pGrade"></div>
-        <div class="grade" id="pGesture"></div>
         <div class="tap-hint" id="tapHint">Swing your phone — or tap here (higher = harder)</div>
       </div>
-      <div class="aim-bar"><i id="aimDot"></i></div>
-      <div class="meter"><i id="playMeter"></i></div>
-      <div class="stamina phone-stamina"><span>Stamina</span><div class="bar"><i id="pStamina"></i></div></div>
-      <div class="secrets" id="pSecrets">
-        <button data-move="power" disabled>💥 Power</button>
-        <button data-move="curve" disabled>🌀 Curve</button>
-        <button data-move="feint" disabled>🎭 Feint</button>
+      <div class="phone-meters">
+        <label>Aim<div class="aim-bar"><i id="aimDot"></i></div></label>
+        <label>Swing<div class="meter"><i id="playMeter"></i></div></label>
+        <label>Stamina<div class="stamina-bar"><i id="pStamina"></i></div></label>
       </div>
       <div class="secrets reads" id="pReads">
         <button data-read="drop" disabled>🔮 Drop?</button>
@@ -100,11 +96,11 @@
         <div class="grade" id="bGrade"></div>
         <div class="tap-hint" id="bHint">Tilt to hook, then swing underhand</div>
       </div>
-      <div class="bowl-meters">
+      <div class="phone-meters">
         <label>Aim<div class="aim-bar"><i id="bAimDot"></i></div></label>
         <label>Hook<div class="aim-bar hook-bar"><i id="bHookDot"></i></div></label>
+        <label>Swing<div class="meter"><i id="bMeter"></i></div></label>
       </div>
-      <div class="meter"><i id="bMeter"></i></div>
       <div class="moves phone-tips"><span><b>↔ Turn</b> aim</span><span><b>⟲ Tilt</b> hook</span><span><b>⤴ Swing</b> bowl</span></div>
     </section>
 
@@ -122,7 +118,9 @@
         <div class="grade" id="tGrade"></div>
         <div class="tap-hint" id="tHint">Swing right = forehand · left = backhand · flick to smash</div>
       </div>
-      <div class="meter"><i id="tMeter"></i></div>
+      <div class="phone-meters">
+        <label>Swing<div class="meter"><i id="tMeter"></i></div></label>
+      </div>
       <div class="moves phone-tips"><span><b>◀ Left</b> backhand</span><span><b>Right ▶</b> forehand</span><span><b>⤴ Flick</b> smash</span></div>
     </section>
 

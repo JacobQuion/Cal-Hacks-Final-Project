@@ -565,11 +565,11 @@ function showPoint(won, why, delay = 0, shout = null) {
   if (won) {
     const big = game.rally >= 8;
     callout(big ? 'WHAT A RALLY!' : 'POINT!', '#ffc61a', why);
-    sfx.point(); sfx.cheer(big ? 0.8 : 0.35); world.cheer(big ? 1 : 0.6);
+    sfx.point(); sfx.cheer(big ? 0.9 : 0.55); world.cheer(big ? 1 : 0.6);
     world.confetti.burst(V(0, 1.1, -0.6), big ? 1 : 0.5);
   } else {
     if (shout) callout(shout[0], '#ffffff', shout[1]); else callout(`${oppShort().toUpperCase()} POINT`, '#ffffff', why);
-    sfx.lose();
+    sfx.lose(); sfx.applause(1.1, 0.25); world.cheer(0.3);
   }
 }
 
@@ -602,7 +602,7 @@ function showEnd() {
   $('btnEndLobby').classList.toggle('hidden', net.vs);
   const card = $('endCard');
   card.classList.remove('hidden', 'go'); void card.offsetWidth; card.classList.add('go');
-  if (won) { sfx.win(); world.confetti.burst(V(0, 1.2, 0), 1.4); world.cheer(1); } else sfx.lose();
+  if (won) { sfx.win(); sfx.cheer(1); world.confetti.burst(V(0, 1.2, 0), 1.4); world.cheer(1); } else { sfx.lose(); sfx.applause(1.6, 0.4); }
 }
 function playAgain() {
   initAudioSafe(); sfx.ui();

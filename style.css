@@ -736,8 +736,8 @@ body.bowl .end-card .end-side b { color: #fff; text-shadow: 0 0 40px rgba(31, 13
 .bowl-pad .bowl-ball i:nth-child(3) { left: 56px; top: 74px; width: 22px; height: 28px; }
 .bowl-pad.hit .bowl-ball { animation: ballOut .5s ease-in; }
 @keyframes ballOut { 0% { transform: translateY(0) scale(1); } 60% { transform: translateY(-120px) scale(.5); opacity: .4; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
-.bowl-meters { display: grid; gap: 8px; }
-.bowl-meters label { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; color: #b9c4ff; text-transform: uppercase; letter-spacing: .5px; }
+.phone-meters { display: grid; gap: 8px; }
+.phone-meters label { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; color: #b9c4ff; text-transform: uppercase; letter-spacing: .5px; }
 .hook-bar i { background: var(--purple) !important; }
 .phone-tips { grid-template-columns: repeat(3, 1fr) !important; }
 @media (max-width: 900px) {
@@ -856,3 +856,81 @@ body.bowl .end-card .end-wait { font-weight: 800; color: #fff; opacity: .85; }
 .scorecard.opp-card .sc-name { background: var(--red); }
 body.bowl.vs:not(.pong) .chips-right { top: 186px; }
 @media (max-width: 1100px) { .scorecard.opp-card { top: 88px; transform: translateX(-50%) scale(.5); } }
+
+/* ---------- Phone controller, iPhone touch-up: soft cards like the laptop, labelled meters, safe areas ---------- */
+body.phone { overscroll-behavior: none; touch-action: manipulation; }
+body.phone .phone-wrap {
+  gap: 12px;
+  padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+body.phone .card, body.phone .swing-pad {
+  border: 0; border-radius: 30px; background: #f6f7fb;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, .35), 0 20px 44px rgba(0, 0, 0, .5);
+}
+body.phone .card.step { padding: 26px 20px 22px; gap: 14px; }
+body.phone .step h2 { font-weight: 900; font-size: 25px; line-height: 1.15; }
+body.phone .step p { font-weight: 700; font-size: 16px; color: #6b7392; }
+body.phone .big-btn {
+  border: 0; border-radius: 18px; font-weight: 900; font-size: 20px; padding: 16px 18px; min-height: 56px;
+  box-shadow: 0 5px 0 #c99a00, 0 10px 22px rgba(0, 0, 0, .18);
+}
+body.phone .big-btn:not(.primary) { background: #e9ecf5; box-shadow: 0 5px 0 #c9cee0; }
+body.phone .big-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #c99a00; }
+body.phone .small-btn {
+  border: 0; border-radius: 14px; font-weight: 800; font-size: 15px; padding: 11px 16px; min-height: 44px;
+  background: #e9ecf5; color: var(--ink); box-shadow: none;
+}
+body.phone .dots i { border: 0; background: #dfe3ef; }
+body.phone .dots i.on { background: var(--mint); }
+
+/* Play screens */
+body.phone .play { gap: 10px; }
+body.phone .play-top .mini-score {
+  border: 0; border-radius: 16px; padding: 8px 16px; background: rgba(255, 255, 255, .1); color: #fff;
+  font-weight: 900; font-size: 22px; font-variant-numeric: tabular-nums;
+}
+body.phone .play-top .small-btn { background: rgba(255, 255, 255, .1); color: #dfe4ff; font-size: 14px; }
+body.phone .prompt {
+  -webkit-text-stroke: 0; font-weight: 900; font-size: 20px; line-height: 1.2; color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .6); min-height: 50px; display: grid; place-items: center; padding: 0 8px;
+}
+body.phone .swing-pad { gap: 6px; }
+body.phone .swing-pad .last { font-weight: 900; font-size: 28px; text-align: center; padding: 0 12px; }
+body.phone .swing-pad .grade { font-weight: 800; font-size: 17px; color: #6b7392; text-align: center; }
+body.phone .swing-pad .tap-hint {
+  left: 18px; right: 18px; bottom: 16px; text-align: center; font-weight: 700; font-size: 13px; line-height: 1.3; color: #8a91ad;
+}
+body.phone .swing-pad .racket { font-size: 100px; }
+/* Labelled meters: Aim / Hook / Swing / Stamina */
+body.phone .phone-meters { gap: 9px; padding: 0 2px; }
+body.phone .phone-meters label { grid-template-columns: 74px 1fr; font-size: 12px; font-weight: 900; letter-spacing: 1px; color: #aab3dd; }
+body.phone .aim-bar, body.phone .meter, body.phone .stamina-bar {
+  height: 12px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, .13); overflow: visible; position: relative;
+}
+body.phone .aim-bar::after { content: ''; position: absolute; left: 50%; top: 2px; bottom: 2px; width: 2px; margin-left: -1px; background: rgba(255, 255, 255, .25); }
+body.phone .aim-bar i { width: 20px; height: 20px; margin: -10px 0 0 -10px; border: 3px solid #0b0d1d; box-shadow: 0 0 10px rgba(255, 210, 63, .5); z-index: 1; }
+body.phone .meter i, body.phone .stamina-bar i { border-radius: 999px; }
+body.phone .stamina-bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #22c55e, #a3e635); transition: width .3s; }
+body.phone .stamina-bar i.low { background: #ff4a4a; }
+/* Reads */
+body.phone .secrets { gap: 8px; }
+body.phone .secrets button {
+  border: 0; border-radius: 14px; min-height: 44px; font-weight: 800; font-size: 15px;
+  background: rgba(255, 255, 255, .1); color: #e3e7ff;
+}
+body.phone .secrets button:disabled { opacity: .4; }
+body.phone .secrets button.armed { background: var(--purple); color: #fff; box-shadow: 0 0 16px rgba(155, 107, 255, .6); }
+body.phone .moves { font-size: 12px; font-weight: 700; color: #9aa4d4; padding-bottom: 2px; }
+body.phone .moves b { font-weight: 900; font-size: 14px; color: #c6ff00; }
+/* Short iPhones (SE, mini): tighten up so nothing is cut off */
+@media (max-height: 700px) {
+  body.phone .prompt { font-size: 17px; min-height: 42px; }
+  body.phone .swing-pad .racket { font-size: 76px; }
+  body.phone .phone-wrap { gap: 8px; }
+  body.phone .play { gap: 8px; }
+  body.phone .phone-meters { gap: 6px; }
+}
+@media (max-height: 580px) { body.phone .moves { display: none; } }
+/* Let the pad give up height so the meters and tips below always fit on screen. */
+body.phone .play { min-height: 0; }
+body.phone .swing-pad { min-height: 160px; flex: 1 1 0; }

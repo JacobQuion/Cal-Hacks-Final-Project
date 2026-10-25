@@ -48,7 +48,28 @@ export const sfx = {
   net() { noise(0.16, { freq: 700, q: 0.6, vol: 0.3 }); },
   point() { [0, 4, 7, 12].forEach((s, i) => tone(587 * 2 ** (s / 12), 0.2, { type: 'triangle', vol: 0.18, delay: i * 0.07 })); },
   lose() { tone(392, 0.18, { type: 'square', vol: 0.07, slide: -120 }); tone(262, 0.3, { type: 'square', vol: 0.07, slide: -90, delay: 0.14 }); },
-  cheer(i = 0.5) { noise(1.3 + i, { freq: 1300, q: 0.5, vol: 0.12 + i * 0.18, attack: 0.15 }); },
+  // Crowd: a roar that swells and fades, whoops gliding up, and applause. i = how excited (0–1).
+  cheer(i = 0.5) {
+    if (!ctx) return;
+    const dur = 1.6 + i * 1.4;
+    for (const [freq, q, v] of [[420, 1.1, 1], [950, 1.4, 0.75], [1800, 2, 0.5], [2700, 2.6, 0.28]]) {
+      noise(dur, { freq, q, vol: (0.06 + i * 0.12) * v, attack: 0.25, sweep: freq * 0.15 });
+    }
+    const whoops = 2 + Math.round(i * 6);
+    for (let k = 0; k < whoops; k++) {
+      tone(480 + Math.random() * 520, 0.3 + Math.random() * 0.35, { vol: 0.018 + i * 0.03, slide: 350 + Math.random() * 650, delay: 0.08 + Math.random() * dur * 0.45 });
+    }
+    sfx.applause(dur * 0.9, 0.4 + i * 0.6);
+  },
+  /** Many hands clapping for `dur` seconds. */
+  applause(dur = 1.4, i = 0.5) {
+    if (!ctx) return;
+    const claps = Math.round(dur * (18 + i * 40));
+    for (let k = 0; k < claps; k++) {
+      const at = Math.random() * dur, fade = 1 - at / dur;
+      noise(0.025 + Math.random() * 0.02, { freq: 1300 + Math.random() * 1700, q: 1.2, vol: (0.04 + i * 0.07) * (0.35 + 0.65 * fade), attack: 0.001, delay: at });
+    }
+  },
   hover() { tone(1180, 0.045, { type: 'triangle', vol: 0.09, slide: 220 }); },
   ui() { tone(880, 0.06, { type: 'triangle', vol: 0.2 }); tone(1320, 0.08, { type: 'triangle', vol: 0.15, delay: 0.04 }); },
   connect() { [0, 7, 12].forEach((s, i) => tone(660 * 2 ** (s / 12), 0.14, { type: 'triangle', vol: 0.16, delay: i * 0.08 })); },

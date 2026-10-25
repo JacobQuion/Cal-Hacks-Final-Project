@@ -246,7 +246,6 @@ function refresh() {
   phone.tapMode = !!(ph && ph.tapMode);
   setPhoneStatus();
 
-  hud.setSecret(first(conn.db.mySecret.iter()));
   const st = first(conn.db.myStamina.iter());
   hud.setStamina(st ? st.value : 100);
   const cond = [...conn.db.condition.iter()].find(c => c.seat !== net.seat);
@@ -562,11 +561,11 @@ function onRallyEvent(e) {
   if (e.matchId !== net.matchId) return;
   game.incoming = null; fx.setTiming(null, null); fx.setLanding(null);
   if (net.spectator) {
-    hud.callout(`${seatName(M, e.winner)}!`, '#ffd23f'); sfx.point();
+    hud.callout(`${seatName(M, e.winner)}!`, '#ffd23f'); sfx.point(); sfx.cheer(0.5); game.excite = 0.8;
   } else if (e.winner === net.seat) {
-    hud.callout('POINT!', '#ffd23f'); hud.sub(e.reason, '#ffffff'); sfx.point(); sfx.cheer(0.6); game.excite = 1;
+    hud.callout('POINT!', '#ffd23f'); hud.sub(e.reason, '#ffffff'); sfx.point(); sfx.cheer(e.rally >= 6 ? 0.9 : 0.6); game.excite = 1;
   } else {
-    hud.callout(e.reason === 'WINNER!' ? 'MISSED!' : e.reason, '#ffffff'); sfx.lose(); game.excite = 0.3;
+    hud.callout(e.reason === 'WINNER!' ? 'MISSED!' : e.reason, '#ffffff'); sfx.lose(); sfx.applause(1.1, 0.25); game.excite = 0.3;
   }
   if (e.bullseye) setTimeout(() => hud.toast(e.winner === net.seat && !net.spectator ? '🎯 BULLSEYE — landed in your secret zone! +25 stamina' : `🎯 ${seatName(M, e.winner)} hit a secret target zone`, 2200), 400);
   if (e.rally >= 6) setTimeout(() => hud.toast(`🔥 ${e.rally}-shot rally!`, 1500), 500);
@@ -659,7 +658,7 @@ function renderStats(m) {
     line('Shots', r => r.shots) + line('Smashes', r => r.smashes) +
     line('Fastest smash', r => (r.fastestKmh ? `${Math.round(r.fastestKmh)} km/h` : '—')) +
     line('Perfect hits', r => r.perfects) + line('Drops &amp; net shots', r => r.drops) +
-    line('Clears / lifts', r => `${r.clears} / ${r.lifts}`) + line('Secret moves', r => r.specials) +
+    line('Clears / lifts', r => `${r.clears} / ${r.lifts}`) +
     `<tr><th>Longest rally</th><td colspan="2">${me.longestRally} shots</td></tr>`;
 }
 
@@ -716,7 +715,7 @@ function updateReplay(dt) {
     startSwing(actors[who], swingKind(p.y));
     shuttle.launch(p, v); fx.resetTrail(); fx.setTrailColor(s.name === 'SMASH!' ? 0xff2bd6 : 0xc6ff00);
     const shotEl = $('replayShot');
-    shotEl.textContent = `${seatName(M, s.seat)}: ${s.name}${s.special ? ` · secret ${s.special.toUpperCase()}` : ''} · ${Math.round(s.speedKmh)} km/h${s.grade ? ` · ${s.grade}` : ''}`;
+    shotEl.textContent = `${seatName(M, s.seat)}: ${s.name} · ${Math.round(s.speedKmh)} km/h${s.grade ? ` · ${s.grade}` : ''}`;
     shotEl.style.color = s.name === 'SMASH!' ? '#ff4f8b' : '#ffffff';
     shotEl.classList.remove('go'); void shotEl.offsetWidth; shotEl.classList.add('go');
   }
@@ -827,16 +826,10 @@ $('btnEndResults').addEventListener('click', () => { sfx.ui(); if (M) showResult
 $('btnEndReplay').addEventListener('click', () => { sfx.ui(); startReplay('last'); });
 $('btnEndRematch').addEventListener('click', () => { sfx.ui(); act('rematch'); });
 $('pauseBtn').addEventListener('click', () => { sfx.ui(); act('setPaused', { paused: true }); });
-for (const b of document.querySelectorAll('#secretCard button')) b.addEventListener('click', () => toggleSecret(b.dataset.move));
 for (const b of document.querySelectorAll('#readCard button')) b.addEventListener('click', () => pickRead(b.dataset.read));
 $('btnScout').addEventListener('click', toggleScout);
 $('btnScoutClose').addEventListener('click', () => $('scoutPanel').classList.add('hidden'));
 
-function toggleSecret(move) {
-  if (net.spectator || !net.conn) return;
-  const sec = first(net.conn.db.mySecret.iter());
-  act('pickSecret', { move: sec && sec.armed === move ? '' : move });
-}
 
 // Laptop shortcuts for the on-screen buttons. Swinging and aiming only come from the phone.
 window.addEventListener('keydown', e => {
@@ -845,9 +838,6 @@ window.addEventListener('keydown', e => {
   if (k === 'p' || k === 'escape') { if (game.state === 'playing' || game.state === 'paused') act('setPaused', { paused: game.state === 'playing' }); return; }
   if (e.repeat) return;
   if (game.state !== 'playing') return;
-  if (k === '1') toggleSecret('power');
-  if (k === '2') toggleSecret('curve');
-  if (k === '3') toggleSecret('feint');
   if (k === 'q') pickRead('drop');
   if (k === 'w') pickRead('clear');
   if (k === 'e') pickRead('smash');

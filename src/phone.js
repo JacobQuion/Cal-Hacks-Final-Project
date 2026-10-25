@@ -1,6 +1,6 @@
 // Phone controller: pairs its own SpacetimeDB identity to one seat of a match, calibrates,
 // detects swings from motion sensors and sends them through reducers. Feedback (hits, score,
-// secret moves, stamina) arrives through subscriptions, views and event tables.
+// stamina) arrives through subscriptions, views and event tables.
 import { connect, call, tables } from './stdb.js';
 import { bowlState, callRoll, laneKey } from '../spacetimedb/src/bowling.ts';
 import { pongServer } from '../spacetimedb/src/pong.ts';
@@ -122,14 +122,6 @@ function refresh() {
     else if (m.status === 'paused') setPrompt(`Paused — ${m.pausedReason}`);
     else if (m.status === 'over') setPrompt(m.winner === seat ? '🏆 You win! Swing for a rematch' : `${opp} wins — swing for a rematch`);
     else if (m.phase === 'serve') setPrompt(m.server === seat ? 'Your serve — swing!' : `${opp} serving…`);
-  }
-  const sec = first(conn.db.mySecret.iter());
-  for (const b of document.querySelectorAll('#pSecrets button')) {
-    const mv = b.dataset.move;
-    const used = sec ? (mv === 'power' ? sec.usedPower : mv === 'curve' ? sec.usedCurve : sec.usedFeint) : false;
-    b.classList.toggle('armed', !!sec && sec.armed === mv);
-    b.classList.toggle('used', used);
-    b.disabled = !sec || used;
   }
   // Reads: only while the opponent is about to hit (their serve, or your shot is flying to them).
   // my_shot only ever holds your own shot, so "it exists" means the shuttle is heading to the opponent.
@@ -387,7 +379,6 @@ function emitSwing(peak, lagMs, swingAim, gesture = { dir: 'flat', slice: false 
   if (stage === 'gentle' || stage === 'hard') return recordCalibration(peak);
   if (stage !== 'play' || performance.now() - playSince < 1500) return;
   act('phoneSwing', { power: +powerFromPeak(peak).toFixed(3), aim: +swingAim.toFixed(3), lag: Math.round(lagMs), dir: gesture.dir, slice: !!gesture.slice, tap: false });
-  $('pGesture').textContent = gesture.slice ? '↻ twist' : { down: '↓ chop', up: '↑ up', flat: '→ flat' }[gesture.dir];
 }
 
 // ---------- calibration ----------
@@ -523,14 +514,6 @@ for (const b of document.querySelectorAll('#pReads button')) {
   b.addEventListener('click', () => {
     const rd = conn && first(conn.db.myRead.iter());
     act('pickRead', { guess: rd && rd.guess === b.dataset.read ? '' : b.dataset.read });
-    buzz(15);
-  });
-}
-// Secret moves: armed through a reducer, visible only to this player's devices (my_secret view).
-for (const b of document.querySelectorAll('#pSecrets button')) {
-  b.addEventListener('click', () => {
-    const sec = conn && first(conn.db.mySecret.iter());
-    act('pickSecret', { move: sec && sec.armed === b.dataset.move ? '' : b.dataset.move });
     buzz(15);
   });
 }

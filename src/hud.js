@@ -16,16 +16,6 @@ export const hud = {
     bar.classList.toggle('low', v < 30);
   },
   setCondition(label) { $('oppCondition').textContent = `Opponent: ${label}`; },
-  // Secret-move card from the my_secret view: armed one glows, spent ones are crossed out.
-  setSecret(sec) {
-    for (const b of document.querySelectorAll('#secretCard button')) {
-      const m = b.dataset.move;
-      const used = sec ? (m === 'power' ? sec.usedPower : m === 'curve' ? sec.usedCurve : sec.usedFeint) : false;
-      b.classList.toggle('armed', !!sec && sec.armed === m);
-      b.classList.toggle('used', used);
-      b.disabled = used;
-    }
-  },
   setInput(text, state) {
     const c = $('inputChip');
     c.classList.remove('good', 'wait');

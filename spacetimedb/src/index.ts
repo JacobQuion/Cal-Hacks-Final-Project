@@ -666,11 +666,6 @@ function planAI(ctx: Ctx, m: MatchRow, seat: number, s: { px: number; py: number
   if (!d) return; // letting it go out
   const zone = zoneOf(ctx, m.id, seat);
   if (zone && rngOf(ctx)() < 0.5) d.aim = Math.max(-1, Math.min(1, zone.x / 2.24)); // go for its secret zone
-  if (rngOf(ctx)() < L.secret) {
-    const sec = secretOf(ctx, m.id, seat);
-    const free = SPECIALS.filter(sp => sec && !sec[sp === 'power' ? 'usedPower' : sp === 'curve' ? 'usedCurve' : 'usedFeint']);
-    if (sec && !sec.armed && free.length) ctx.db.secret.id.update({ ...sec, armed: free[ctx.random.integerInRange(0, free.length - 1)] });
-  }
   schedule(ctx, m.id, 'ai_hit', (have + d.timingError) * 1000, m.shotSeq, JSON.stringify(d));
 }
 
@@ -1208,8 +1203,10 @@ export const rtcAck = spacetimedb.reducer({ upTo: t.u64() }, (ctx, { upTo }) => 
   for (const r of [...ctx.db.rtcMail.to.filter(hex(ctx))]) if (r.id <= upTo) ctx.db.rtcMail.id.delete(r.id);
 });
 
-/** Arm a secret move (phone or laptop). Each one works once per match; the opponent never sees it. */
+/** Secret moves are retired; only disarming is still accepted, so an old client can't arm one. */
 export const pickSecret = spacetimedb.reducer({ move: t.string() }, (ctx, { move }) => {
+  // Secret moves (power-ups) are retired: the game no longer offers them, and nothing can arm one.
+  if (move !== '') throw new SenderError('Secret moves are no longer part of the game');
   const { m, seat } = myAnySeat(ctx);
   if (m.status !== 'playing' && m.status !== 'paused') throw new SenderError('Secret moves are for live matches');
   const sec = secretOf(ctx, m.id, seat);

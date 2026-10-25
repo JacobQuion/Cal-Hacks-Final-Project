@@ -386,16 +386,17 @@ function countPins() {
     const streak = countStreak([...prev, n]);
     callout(streak >= 3 ? (streak === 3 ? 'TURKEY!' : `${streak} IN A ROW!`) : streak === 2 ? 'DOUBLE!' : 'STRIKE!', '#ffc61a', streak >= 2 ? '🔥 Keep it rolling' : '🎳 All ten down');
     world.confetti.burst(new THREE.Vector3(0, 0.4, HEAD_Z - 0.3), 1.2); world.flash(1.4);
-    sfx.strike(); sfx.cheer(0.8);
+    sfx.strike(); sfx.cheer(1);
   } else if (call_ === 'spare') {
     callout('SPARE!', '#35c9a5', 'Picked it up 👌');
     world.confetti.burst(new THREE.Vector3(0, 0.4, HEAD_Z - 0.3), 0.7); world.flash(0.8);
-    sfx.point(); sfx.cheer(0.4);
+    sfx.point(); sfx.cheer(0.6);
   } else if (call_ === 'gutter') {
     callout(lane.ball.gutter ? 'GUTTER BALL' : 'MISSED!', '#ffffff', after.done || after.fresh ? '' : 'Shake it off. Pick up the spare!');
     sfx.lose();
   } else {
     const split = !after.fresh && !after.done && isSplit(left);
+    if (n >= 7) sfx.cheer(0.25); else if (n > 0) sfx.applause(1, 0.25);
     callout(`${n} PIN${n === 1 ? '' : 'S'}`, '#ffffff', split ? '😬 SPLIT!' : after.fresh || after.done ? `${10 - pinCount(left)} down this frame` : `${pinCount(left)} left, go get the spare`);
   }
   game.state = 'sweep'; game.t = 0;
@@ -460,7 +461,7 @@ function showEnd(st, quiet = false) {
   if (quiet && again) { card.classList.remove('hidden'); return; }
   card.classList.remove('hidden', 'go'); void card.offsetWidth; card.classList.add('go');
   if (final && (!net.vs || M?.winner === net.seat || M?.winner === 255)) {
-    sfx.win();
+    sfx.win(); sfx.cheer(st.score >= 120 ? 1 : 0.6);
     world.confetti.burst(new THREE.Vector3(0, 0.6, HEAD_Z - 0.2), 1.4);
   } else if (final) sfx.lose();
 }
