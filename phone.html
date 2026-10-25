@@ -108,6 +108,24 @@
       <div class="moves phone-tips"><span><b>↔ Turn</b> aim</span><span><b>⟲ Tilt</b> hook</span><span><b>⤴ Swing</b> bowl</span></div>
     </section>
 
+    <!-- 6c. Ping pong (pingpong.html: the phone is the paddle) -->
+    <section class="play hidden" id="s-pong">
+      <div class="play-top">
+        <div class="mini-score" id="tScore">0 – 0</div>
+        <button class="small-btn" id="btnRecalT">Recalibrate</button>
+      </div>
+      <div class="prompt" id="tPrompt">Tilt to pick a side!</div>
+      <div class="swing-pad pong-pad" id="tPad">
+        <div class="pp-sides"><span class="bh" id="tBh">◀ BACKHAND</span><span class="fh" id="tFh">FOREHAND ▶</span></div>
+        <div class="pp-paddle" id="tPaddle"><b></b><i></i></div>
+        <div class="last" id="tLast"></div>
+        <div class="grade" id="tGrade"></div>
+        <div class="tap-hint" id="tHint">Tilt right = forehand · left = backhand · flick to smash</div>
+      </div>
+      <div class="meter"><i id="tMeter"></i></div>
+      <div class="moves phone-tips"><span><b>⟲ Left</b> backhand</span><span><b>⟳ Right</b> forehand</span><span><b>⤴ Flick</b> smash</span></div>
+    </section>
+
   </main>
   <script type="module" src="/src/phone.js"></script>
 </body>

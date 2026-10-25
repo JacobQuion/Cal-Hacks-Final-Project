@@ -189,6 +189,43 @@ export const PointLog = __t.object("PointLog", {
 });
 export type PointLog = __Infer<typeof PointLog>;
 
+export const PongGame = __t.object("PongGame", {
+  matchId: __t.u32(),
+  name: __t.string(),
+  level: __t.u8(),
+  me: __t.u8(),
+  cpu: __t.u8(),
+  firstServer: __t.u8(),
+  done: __t.bool(),
+  gameNo: __t.u32(),
+  seq: __t.u32(),
+  longestRally: __t.u16(),
+  perfects: __t.u16(),
+  last: __t.string(),
+});
+export type PongGame = __Infer<typeof PongGame>;
+
+export const PongInput = __t.object("PongInput", {
+  matchId: __t.u32(),
+  kind: __t.string(),
+  tilt: __t.f32(),
+  power: __t.f32(),
+  tap: __t.bool(),
+});
+export type PongInput = __Infer<typeof PongInput>;
+
+export const PongScore = __t.object("PongScore", {
+  id: __t.u32(),
+  name: __t.string(),
+  level: __t.u8(),
+  me: __t.u8(),
+  cpu: __t.u8(),
+  won: __t.bool(),
+  longestRally: __t.u16(),
+  at: __t.timestamp(),
+});
+export type PongScore = __Infer<typeof PongScore>;
+
 export const Queue = __t.object("Queue", {
   identity: __t.identity(),
   name: __t.string(),

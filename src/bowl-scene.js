@@ -270,7 +270,7 @@ function makeGuide() {
 }
 
 // ---------- confetti for strikes and spares ----------
-function makeConfetti() {
+export function makeConfetti() {
   const N = 260;
   const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.035, 0.022), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, toneMapped: false }), N);
   mesh.frustumCulled = false;

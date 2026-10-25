@@ -71,5 +71,8 @@ export const sfx = {
   gutter() { noise(0.5, { freq: 700, q: 3, vol: 0.12, attack: 0.03, sweep: -400 }); tone(220, 0.3, { type: 'square', vol: 0.05, slide: -90, delay: 0.1 }); },
   sweep() { noise(0.9, { freq: 260, q: 1.5, vol: 0.12, attack: 0.1, type: 'lowpass', sweep: 220 }); tone(110, 0.8, { type: 'sawtooth', vol: 0.025, slide: 30 }); },
   strike() { [0, 4, 7, 12, 16].forEach((s, i) => tone(523 * 2 ** (s / 12), 0.22, { type: 'square', vol: 0.06, delay: i * 0.07 })); },
+  // Ping pong
+  pock(vol = 1, pitch = 1) { tone(1500 * pitch, 0.035, { type: 'triangle', vol: 0.22 * vol, slide: -500 }); noise(0.03, { freq: 3800 * pitch, q: 2, vol: 0.2 * vol }); },
+  paddle(power = 0.5) { tone(900 + power * 500, 0.045, { type: 'triangle', vol: 0.3, slide: -400 }); noise(0.05, { freq: 2600 + power * 1600, q: 1.4, vol: 0.3 + power * 0.25 }); if (power > 0.8) noise(0.18, { freq: 1200, q: 0.7, vol: 0.18, sweep: -700 }); },
   win() { [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => tone(523 * 2 ** (s / 12), 0.25, { type: 'triangle', vol: 0.16, delay: i * 0.09 })); },
 };

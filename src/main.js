@@ -231,8 +231,8 @@ function refresh() {
   net.matchId = matchId;
   net.seat = !net.spectator && d && d.seat !== 255 ? d.seat : 0;
   M = matchId ? [...conn.db.match.iter()].find(m => m.id === matchId) || null : null;
-  // Back from the bowling page (same tab, same identity): close the lane, show the menu.
-  if (M && M.mode === 'bowl') {
+  // Back from the bowling or ping pong page (same tab, same identity): close it, show the menu.
+  if (M && (M.mode === 'bowl' || M.mode === 'pong')) {
     if (!net.spectator && net.leftBowl !== M.id) { net.leftBowl = M.id; act('leaveMatch'); }
     M = null; net.matchId = 0;
   }
@@ -777,6 +777,7 @@ window.addEventListener('pointerdown', initAudioSafe, { once: true });
 window.addEventListener('keydown', initAudioSafe, { once: true });
 $('btnAI').addEventListener('click', () => { initAudioSafe(); sfx.ui(); act('createMatch', { mode: 'ai', level: game.level, name: nameNow() }); });
 $('btnBowl').addEventListener('click', () => { initAudioSafe(); sfx.ui(); try { localStorage.setItem('racket.name', nameNow()); } catch { /* storage unavailable */ } });
+$('btnPong').addEventListener('click', () => { initAudioSafe(); sfx.ui(); try { localStorage.setItem('racket.name', nameNow()); } catch { /* storage unavailable */ } });
 $('btnCreate').addEventListener('click', () => { initAudioSafe(); sfx.ui(); act('createMatch', { mode: 'pvp', level: 1, name: nameNow() }); });
 $('btnReady').addEventListener('click', () => {
   initAudioSafe(); sfx.ui();

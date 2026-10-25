@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Racket Rush Ping Pong</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,600;0,700;0,800;0,900;1,900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="arena bowl pong">
+  <canvas id="game"></canvas>
+
+  <!-- Table lobby: pair the phone (it's the paddle), pick the NPC, play -->
+  <section id="lobby" class="screen show">
+    <div class="logo">
+      <span class="logo-top">RACKET RUSH</span>
+      <span class="logo-bottom">PING PONG</span>
+      <span class="logo-shuttle">🏓</span>
+    </div>
+    <div class="menu-row">
+      <div class="card pair-card">
+        <div class="qr" id="qr"><span class="hint">Loading…</span></div>
+        <div class="pair-steps">
+          <h3>Your phone is the paddle</h3>
+          <ol>
+            <li>Scan the code with your phone camera</li>
+            <li>Allow motion &amp; calibrate</li>
+            <li>Tilt <b>right</b> for forehand, <b>left</b> for backhand</li>
+            <li>Flick as the ball arrives to smash it</li>
+          </ol>
+          <div class="status wait" id="phoneStatus"><i></i><span>Waiting for phone…</span></div>
+          <div class="url" id="phoneUrl"></div>
+        </div>
+      </div>
+      <div class="card side-card">
+        <div class="room-code">Table <b id="tableCode">····</b></div>
+        <label class="field"><span>Player</span><input id="nameInput" maxlength="16" autocomplete="off" /></label>
+        <div class="seg" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
+          <button data-level="0" class="on">Easy</button>
+          <button data-level="1">Medium</button>
+          <button data-level="2">Hard</button>
+        </div>
+        <button class="big-btn primary" id="btnStart">▶ Start game</button>
+        <button class="small-btn hidden" id="btnNewGame">↻ New game</button>
+        <a class="small-btn back-link" href="/">🏸 Back to badminton</a>
+      </div>
+      <div class="card best-card">
+        <h3 class="feed-title">🏆 Wins</h3>
+        <ol class="hof-list" id="bestList"><li class="hint">No wins yet. Be the first!</li></ol>
+      </div>
+    </div>
+    <p class="conn" id="connStatus"></p>
+  </section>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="board pong-board">
+      <div class="side you"><i class="serve-dot" id="serveYou"></i><label id="nameYou">YOU</label><b id="scoreYou">0</b></div>
+      <span class="vs">VS</span>
+      <div class="side cpu"><b id="scoreCpu">0</b><label id="nameCpu">NPC</label><i class="serve-dot" id="serveCpu"></i></div>
+    </div>
+    <button class="pause-btn" id="btnHome" aria-label="Back to the lobby">⌂</button>
+    <div class="chips-right">
+      <div class="chip level" id="levelChip">EASY</div>
+      <div class="chip" id="rallyChip">Rally 0</div>
+      <div class="chip game-chip hidden" id="gameChip"></div>
+    </div>
+    <div class="side-meter" aria-label="Paddle side">
+      <div class="sm-side bh" id="sideBh"><span>◀</span> BACKHAND</div>
+      <div class="sm-bar"><i id="sideDot"></i></div>
+      <div class="sm-side fh" id="sideFh">FOREHAND <span>▶</span></div>
+    </div>
+    <div class="status phone-chip chip" id="inputChip"><i></i><span>No phone</span></div>
+    <div class="pong-prompt hidden" id="prompt"></div>
+    <div class="hit-text" id="hitText"></div>
+    <div id="bigCallout" class="bowl-callout"></div>
+    <div id="bigSub" class="bowl-sub"></div>
+  </div>
+
+  <!-- Game over -->
+  <div id="endCard" class="end-card hidden" role="dialog" aria-label="Final score">
+    <span class="end-kicker">Final score</span>
+    <h2 class="end-title" id="endTitle">YOU WIN!</h2>
+    <div class="end-line">
+      <div class="end-side" id="endSideMe"><b id="endMe">0</b><span id="endMeName"></span></div>
+      <span class="end-dash">–</span>
+      <div class="end-side" id="endSideCpu"><b id="endCpu">0</b><span id="endCpuName"></span></div>
+    </div>
+    <div class="end-stats" id="endStats"></div>
+    <div class="end-btns">
+      <button class="small-btn primary" id="btnAgain">↻ Play again</button>
+      <button class="small-btn" id="btnEndLobby">⌂ Lobby</button>
+      <a class="small-btn" href="/">🏸 Badminton</a>
+    </div>
+  </div>
+  <div id="toast"></div>
+
+  <script type="module" src="/src/pingpong.js"></script>
+</body>
+</html>

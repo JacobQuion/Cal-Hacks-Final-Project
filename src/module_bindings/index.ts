@@ -43,10 +43,13 @@ import LeaveQueueReducer from "./leave_queue_reducer";
 import PairPhoneReducer from "./pair_phone_reducer";
 import PhoneAimReducer from "./phone_aim_reducer";
 import PhoneBowlReducer from "./phone_bowl_reducer";
+import PhonePongReducer from "./phone_pong_reducer";
 import PhoneStatusReducer from "./phone_status_reducer";
 import PhoneSwingReducer from "./phone_swing_reducer";
 import PickReadReducer from "./pick_read_reducer";
 import PickSecretReducer from "./pick_secret_reducer";
+import PongNewReducer from "./pong_new_reducer";
+import PongPointReducer from "./pong_point_reducer";
 import QuickMatchReducer from "./quick_match_reducer";
 import RematchReducer from "./rematch_reducer";
 import RtcAckReducer from "./rtc_ack_reducer";
@@ -59,6 +62,7 @@ import SetPausedReducer from "./set_paused_reducer";
 import SetReadyReducer from "./set_ready_reducer";
 import SetScoutReducer from "./set_scout_reducer";
 import StartBowlingReducer from "./start_bowling_reducer";
+import StartPongReducer from "./start_pong_reducer";
 import SwingReducer from "./swing_reducer";
 
 // Import all procedure arg schemas
@@ -85,6 +89,9 @@ import MyShotRow from "./my_shot_table";
 import MyStaminaRow from "./my_stamina_table";
 import MyTargetRow from "./my_target_table";
 import NoticeEventRow from "./notice_event_table";
+import PongGameRow from "./pong_game_table";
+import PongInputRow from "./pong_input_table";
+import PongScoreRow from "./pong_score_table";
 import QueueRow from "./queue_table";
 import RallyEventRow from "./rally_event_table";
 import ReadEventRow from "./read_event_table";
@@ -190,6 +197,36 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, NoticeEventRow),
+  pongGame: __table({
+    name: 'pong_game',
+    indexes: [
+      { accessor: 'matchId', name: 'pong_game_match_id_idx_btree', algorithm: 'btree', columns: [
+        'matchId',
+      ] },
+    ],
+    constraints: [
+      { name: 'pong_game_match_id_key', constraint: 'unique', columns: ['matchId'] },
+    ],
+  }, PongGameRow),
+  pongInput: __table({
+    name: 'pong_input',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, PongInputRow),
+  pongScore: __table({
+    name: 'pong_score',
+    indexes: [
+      { accessor: 'id', name: 'pong_score_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'pong_score_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, PongScoreRow),
   queue: __table({
     name: 'queue',
     indexes: [
@@ -340,10 +377,13 @@ const reducersSchema = __reducers(
   __reducerSchema("pair_phone", PairPhoneReducer),
   __reducerSchema("phone_aim", PhoneAimReducer),
   __reducerSchema("phone_bowl", PhoneBowlReducer),
+  __reducerSchema("phone_pong", PhonePongReducer),
   __reducerSchema("phone_status", PhoneStatusReducer),
   __reducerSchema("phone_swing", PhoneSwingReducer),
   __reducerSchema("pick_read", PickReadReducer),
   __reducerSchema("pick_secret", PickSecretReducer),
+  __reducerSchema("pong_new", PongNewReducer),
+  __reducerSchema("pong_point", PongPointReducer),
   __reducerSchema("quick_match", QuickMatchReducer),
   __reducerSchema("rematch", RematchReducer),
   __reducerSchema("rtc_ack", RtcAckReducer),
@@ -356,6 +396,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_ready", SetReadyReducer),
   __reducerSchema("set_scout", SetScoutReducer),
   __reducerSchema("start_bowling", StartBowlingReducer),
+  __reducerSchema("start_pong", StartPongReducer),
   __reducerSchema("swing", SwingReducer),
 );
 

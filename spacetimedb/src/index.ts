@@ -13,6 +13,7 @@ import {
   serveSpots, sideOf, gradePlayerSwing, crossingOf, HALF_L, type Gesture, type Special,
 } from './core';
 import { FULL_RACK, bowlState, pinCount } from './bowling';
+import { pongDone } from './pong';
 
 // ───────────────────────── public tables ─────────────────────────
 
@@ -341,6 +342,49 @@ const bowlInput = table(
   { matchId: t.u32(), kind: t.string(), power: t.f32(), aim: t.f32(), spin: t.f32(), tap: t.bool() }
 );
 
+// ───────────────────────── ping pong ─────────────────────────
+
+// One game to 11 against the NPC per ping pong "match" (mode = pong). The laptop plays the rally and
+// reports each point; the database keeps score and decides when the game is over.
+const pongGame = table(
+  { name: 'pong_game', public: true },
+  {
+    matchId: t.u32().primaryKey(),
+    name: t.string(),
+    level: t.u8(),
+    me: t.u8(),
+    cpu: t.u8(),
+    firstServer: t.u8(),         // 0 = player, 1 = NPC
+    done: t.bool(),
+    gameNo: t.u32(),
+    seq: t.u32(),                // bumps on every point and new game
+    longestRally: t.u16(),
+    perfects: t.u16(),
+    last: t.string(),            // how the last point ended, for the phone
+  }
+);
+
+// Finished ping pong games, for the lobby's leaderboard.
+const pongScore = table(
+  { name: 'pong_score', public: true },
+  {
+    id: t.u32().primaryKey().autoInc(),
+    name: t.string(),
+    level: t.u8(),
+    me: t.u8(),
+    cpu: t.u8(),
+    won: t.bool(),
+    longestRally: t.u16(),
+    at: t.timestamp(),
+  }
+);
+
+// Phone → its laptop: live paddle tilt (kind = tilt) or a flick (kind = swing).
+const pongInput = table(
+  { name: 'pong_input', public: true, event: true },
+  { matchId: t.u32(), kind: t.string(), tilt: t.f32(), power: t.f32(), tap: t.bool() }
+);
+
 // ───────────────────────── schedule table ─────────────────────────
 
 // One-shot timers: start, serve_ready, land, ai_hit, ai_serve, idle_serve
@@ -360,7 +404,7 @@ const spacetimedb = schema({
   device, match, shotFeed, hallOfFame, queue,
   shot, shotLog, secret, stamina, readPick, targetZone, pointLog, loadout,
   swingEvent, aimEvent, hitEvent, rallyEvent, readEvent, noticeEvent,
-  rtcMail, rtcFrame, timer, bowlGame, bowlScore, bowlInput,
+  rtcMail, rtcFrame, timer, bowlGame, bowlScore, bowlInput, pongGame, pongScore, pongInput,
 });
 export default spacetimedb;
 
@@ -988,6 +1032,61 @@ export const phoneBowl = spacetimedb.reducer(
       throw new SenderError('Not a paired phone');
     }
     ctx.db.bowlInput.insert({ matchId: d.matchId, ...a });
+  }
+);
+
+// ───────────────────────── ping pong ─────────────────────────
+
+/** A ping pong table against the NPC: a match (mode = pong) the phone pairs to, plus its score. */
+export const startPong = spacetimedb.reducer({ name: t.string(), level: t.u8() }, (ctx, { name, level }) => {
+  leaveCurrent(ctx);
+  const n = cleanName(name);
+  const m = blankMatch(ctx, 'pong', Math.min(2, level));
+  m.laptopA = hex(ctx); m.nameA = n; m.fogEnabled = false;
+  const row = ctx.db.match.insert(m);
+  upsertDevice(ctx, { kind: 'laptop', name: n, matchId: row.id, seat: 0 });
+  ctx.db.pongGame.insert({ matchId: row.id, name: n, level: Math.min(2, level), me: 0, cpu: 0, firstServer: 0, done: false, gameNo: 1, seq: 0, longestRally: 0, perfects: 0, last: '' });
+});
+
+function myPongGame(ctx: Ctx) {
+  const { m } = myLaptopSeat(ctx);
+  const g = m.mode === 'pong' ? ctx.db.pongGame.matchId.find(m.id) : undefined;
+  if (!g) throw new SenderError('Not at a ping pong table');
+  return g;
+}
+
+/** One point: who won it, how long the rally was, and how it ended. */
+export const pongPoint = spacetimedb.reducer(
+  { won: t.bool(), rally: t.u16(), perfects: t.u16(), why: t.string() },
+  (ctx, { won, rally, perfects, why }) => {
+    const g = myPongGame(ctx);
+    if (g.done) throw new SenderError('Game over — start a new game');
+    const me = g.me + (won ? 1 : 0), cpu = g.cpu + (won ? 0 : 1);
+    const done = pongDone(me, cpu);
+    const longestRally = Math.max(g.longestRally, Math.min(rally, 999));
+    ctx.db.pongGame.matchId.update({ ...g, me, cpu, done, seq: g.seq + 1, longestRally, perfects: g.perfects + Math.min(perfects, 99), last: why.slice(0, 60) });
+    if (done) ctx.db.pongScore.insert({ id: 0, name: g.name, level: g.level, me, cpu, won: me > cpu, longestRally, at: ctx.timestamp });
+  }
+);
+
+export const pongNew = spacetimedb.reducer({ level: t.u8() }, (ctx, { level }) => {
+  const g = myPongGame(ctx);
+  const d = ctx.db.device.identity.find(ctx.sender);
+  ctx.db.pongGame.matchId.update({
+    ...g, name: d?.name || g.name, level: Math.min(2, level), me: 0, cpu: 0, firstServer: g.gameNo % 2, done: false,
+    gameNo: g.gameNo + 1, seq: g.seq + 1, longestRally: 0, perfects: 0, last: '',
+  });
+});
+
+export const phonePong = spacetimedb.reducer(
+  { kind: t.string(), tilt: t.f32(), power: t.f32(), tap: t.bool() },
+  (ctx, a) => {
+    const d = ctx.db.device.identity.find(ctx.sender);
+    if (!d || d.kind !== 'phone' || d.matchId === 0) {
+      if (a.kind === 'tilt') return;
+      throw new SenderError('Not a paired phone');
+    }
+    ctx.db.pongInput.insert({ matchId: d.matchId, ...a });
   }
 );
 
