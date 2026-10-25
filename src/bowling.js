@@ -162,7 +162,8 @@ const video = createVideoCall({
   sendFrame: data => net.conn?.reducers.rtcSendFrame({ data }),
 });
 function syncVideo() {
-  if (!net.vs || !M) { video.sync(null); return; }
+  if (!M) { video.sync(null); return; }
+  if (!net.vs) { video.sync({ solo: true, matchId: M.id, myName: myName() }); dockVideo(game.state === 'lobby'); return; }
   const opp = net.seat === 0 ? M.laptopB : M.laptopA;
   video.sync({ matchId: M.id, seat: net.seat, oppKey: opp || '', oppName: opp ? oppName() : '', myName: myName() });
   dockVideo(game.state === 'lobby');

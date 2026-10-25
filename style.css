@@ -421,6 +421,8 @@ body.arena .end-btns .small-btn.primary { background: linear-gradient(180deg, #f
 .vlive { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: #ff6b6b; }
 .vlive i { width: 7px; height: 7px; border-radius: 50%; background: #ff4a4a; animation: blink 1.4s infinite; }
 .video-panel.min { width: auto; }
+/* Solo games: just your own camera (no opponent tile, no mic). */
+.video-panel.solo .vtile.opp, .video-panel.solo #btnMic { display: none; }
 .video-panel.min .vtile, .video-panel.min .vlive { display: none; }
 /* Keep menus and overlays clear of the panel while a call is up. */
 body.with-video .screen:not(#lobby):not(#pause) { padding-right: calc(var(--video-w) + 40px); }

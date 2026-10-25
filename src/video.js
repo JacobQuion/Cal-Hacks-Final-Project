@@ -310,7 +310,10 @@ export function createVideoCall({ send, ack, sendFrame }) {
 
   // ---------- public API ----------
   return {
-    /** s: { matchId, seat, oppKey, oppName, myName } while in a 1v1 (oppKey '' until player 2 joins), or null. */
+    /**
+     * s: { matchId, seat, oppKey, oppName, myName } while in a 1v1 (oppKey '' until player 2 joins), or null.
+     * Solo games pass { solo: true, matchId, myName }: just your own camera, nothing goes over the network.
+     */
     sync(s) {
       if (!s) {
         if (!session) return;
@@ -320,9 +323,11 @@ export function createVideoCall({ send, ack, sendFrame }) {
         ui.panel.classList.add('hidden'); document.body.classList.remove('with-video');
         return;
       }
-      const fresh = !session || session.matchId !== s.matchId || session.seat !== s.seat;
-      const oppChanged = session && session.oppKey !== s.oppKey;
-      session = { matchId: s.matchId, seat: s.seat, oppKey: s.oppKey };
+      const seat = s.seat ?? 0, oppKey = s.solo ? '' : s.oppKey || '';
+      const fresh = !session || session.matchId !== s.matchId || session.seat !== seat;
+      const oppChanged = session && session.oppKey !== oppKey;
+      session = { matchId: s.matchId, seat, oppKey };
+      ui.panel.classList.toggle('solo', !!s.solo);
       ui.oppName.textContent = s.oppName || 'Opponent';
       ui.meName.textContent = s.myName ? `${s.myName} (you)` : 'You';
       ui.oppInitial.textContent = (s.oppName || '?').trim().charAt(0).toUpperCase();
@@ -333,11 +338,11 @@ export function createVideoCall({ send, ack, sendFrame }) {
         ui.panel.classList.remove('hidden'); document.body.classList.add('with-video');
         meter = meter || createMeter(ui);
         startMedia();
-        if (s.oppKey) msg('hello');
+        if (oppKey) msg('hello');
       } else if (oppChanged) {
         remoteSid = ''; remoteState = { mic: false, cam: true }; closePc();
         since = performance.now(); relayFrameAt = 0;
-        if (s.oppKey) msg('hello');
+        if (oppKey) msg('hello');
       }
       render();
     },

@@ -209,8 +209,8 @@ const video = createVideoCall({
   sendFrame: data => net.conn?.reducers.rtcSendFrame({ data }),
 });
 function syncVideo() {
-  const pvp = M && M.mode === 'pvp' && !net.spectator && game.state !== 'menu';
-  if (!pvp) { video.sync(null); return; }
+  if (!M || net.spectator || game.state === 'menu') { video.sync(null); return; }
+  if (M.mode !== 'pvp') { video.sync({ solo: true, matchId: M.id, myName: myName(M) || nameNow() }); return; }
   const opp = net.seat === 0 ? M.laptopB : M.laptopA;
   video.sync({ matchId: M.id, seat: net.seat, oppKey: opp || '', oppName: opp ? oppName(M) : '', myName: myName(M) || nameNow() });
 }
