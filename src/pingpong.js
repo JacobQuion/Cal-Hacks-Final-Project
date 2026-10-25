@@ -63,6 +63,19 @@ const oppShort = () => (net.vs ? oppName() : 'NPC');
 const lv = () => (net.vs ? VS : LV[P?.level ?? game.level]);
 const myReady = () => !!M && (net.seat === 0 ? M.readyA : M.readyB);
 
+// Picked on the main menu (?play=solo&level=N or ?play=vs): the table is set up the moment the socket
+// opens, so the QR doesn't wait for the full sync. A reload (param gone) resumes whatever we're in.
+const intent = params.get('play');
+if (params.has('level')) {
+  game.level = clamp(Number(params.get('level')) || 0, 0, 2);
+  try { localStorage.setItem('racket.pongLevel', String(game.level)); } catch { /* storage unavailable */ }
+}
+if (intent) {
+  for (const k of ['play', 'level']) params.delete(k);
+  history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
+}
+setModeBanner(intent === 'vs');
+
 // ---------- SpacetimeDB ----------
 const say = (msg, ms = 2400) => {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -86,6 +99,11 @@ connect({
     conn.db.myFrame.onInsert((_c, row) => video.frame(row));
     conn.db.myFrame.onUpdate?.((_c, _o, row) => video.frame(row));
   },
+  onOpen(conn) {
+    if (!intent || net.intentSent) return;
+    net.intentSent = true; net.conn = conn;
+    if (intent === 'vs') act('createVersus', { sport: 'pong', name: nameNow() }); else startSolo();
+  },
   onReady(conn) {
     net.conn = conn;
     act('setName', { name: nameNow() });
@@ -96,7 +114,7 @@ connect({
     if (join) {
       params.delete('join'); history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
       joinCode(join, !(m && (m.mode === 'pong' || m.mode === 'pongvs')));
-    } else if (!(m && ((m.mode === 'pong' && m.status === 'lobby') || m.mode === 'pongvs'))) startSolo();
+    } else if (!net.intentSent && !(m && ((m.mode === 'pong' && m.status === 'lobby') || m.mode === 'pongvs'))) startSolo();
     refresh();
   },
   onStatus(text) { $('connStatus').textContent = text || '● Connected to SpacetimeDB'; },
@@ -227,6 +245,7 @@ function renderLobby() {
   for (const id of ['vsPlayers', 'btnSolo']) $(id).classList.toggle('hidden', !net.vs);
   $('btnCopy').classList.toggle('hidden', !net.vs || !!M?.laptopB);
   $('codeLabel').textContent = net.vs ? 'Match' : 'Table';
+  setModeBanner(net.code ? net.vs : intent === 'vs');
   if (net.vs && M) {
     const row = (name, ready, isMe) => `<div class="pl ${ready ? 'ready' : ''}"><span>${esc(name || 'Waiting for player 2…')}${isMe ? ' (you)' : ''}</span><b>${name ? (ready ? '✔ Ready' : '…') : ''}</b></div>`;
     $('vsPlayers').innerHTML = row(M.nameA, M.readyA, net.seat === 0) + row(M.nameB, M.readyB, net.seat === 1);
@@ -239,6 +258,12 @@ function renderLobby() {
   }
   $('btnStart').textContent = !net.phoneReady ? '📱 Pair your phone to play' : mid ? `▶ Resume (${P.me} – ${P.cpu})` : '▶ Start game';
   $('btnStart').disabled = !P || !net.phoneReady;
+}
+/** Solo or doubles, in big letters at the top of the lobby. */
+function setModeBanner(vs) {
+  const b = $('modeBanner');
+  b.classList.toggle('doubles', vs);
+  b.innerHTML = vs ? '<b>👥 DOUBLES</b><span>1v1 against a friend</span>' : `<b>🤖 SOLO</b><span>vs the NPC · ${PONG_LEVELS[game.level]}</span>`;
 }
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
