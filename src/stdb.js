@@ -18,10 +18,11 @@ export { tables };
 
 /**
  * Connects, subscribes to `subs` (table refs) and keeps reconnecting with the same identity.
- * Callbacks: onReady(conn, identityHex) after every (re)subscription, onStatus(text|null).
+ * Callbacks: onOpen(conn) as soon as the socket is up (before the subscription lands: reducers called
+ * here save a round trip), onReady(conn, identityHex) after every (re)subscription, onStatus(text|null).
  * `wire(conn)` registers table callbacks; it runs once per connection object.
  */
-export function connect({ subs, wire, onReady, onStatus }) {
+export function connect({ subs, wire, onOpen, onReady, onStatus }) {
   let retry = 0;
   const open = () => {
     onStatus?.('Connecting to SpacetimeDB…');
@@ -32,6 +33,7 @@ export function connect({ subs, wire, onReady, onStatus }) {
       .onConnect((c, identity, token) => {
         setToken(token);
         retry = 0;
+        onOpen?.(c);
         c.subscriptionBuilder()
           .onApplied(() => { onStatus?.(null); onReady?.(c, identity.toHexString()); })
           .onError((_ctx, err) => console.error('Subscription error', err))
