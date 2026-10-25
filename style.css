@@ -688,8 +688,13 @@ body.bowl .side-card .field input { width: 100%; }
 /* Bowling lobby: no top-games card, in solo or doubles. */
 #bestCard { display: none !important; }
 /* Lobby cards (all games): hug their content instead of filling the screen. */
-body.arena #lobby .menu-row { align-items: center; }
+body.arena #lobby .menu-row { align-items: stretch; }
 body.arena #lobby .card { padding: 16px; }
+body.arena #lobby .side-card { justify-content: flex-start; }
+body.arena #lobby .side-card .field > span { display: none; }
+body.arena #lobby .side-card .field input { padding: 8px 12px; font-size: 16px; }
+body.arena #lobby .side-card .seg button { padding: 7px 0; }
+body.arena #lobby .back-link { padding: 5px 12px; font-size: 13px; }
 body.arena #lobby .pair-card { gap: 18px; }
 body.arena #lobby .qr { width: 180px; height: 180px; }
 body.arena #lobby .pair-steps h3 { font-size: 20px; }
