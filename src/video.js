@@ -44,8 +44,8 @@ export function createVideoCall({ send, ack, sendFrame }) {
   let remoteSid = '';
   let pc = null, pcBorn = 0, remoteStream = null, pendingIce = [], iceOut = [], iceTimer = 0;
   let local = { audio: null, video: null };
-  let want = { mic: true, cam: true };
-  let remoteState = { mic: true, cam: true };
+  let want = { mic: false, cam: true };   // mics start muted each match
+  let remoteState = { mic: false, cam: true };
   let mediaError = '';
   let lastId = 0n, ackTimer = 0, chain = Promise.resolve(), restartTimer = 0;
   let meter = null;
@@ -315,7 +315,7 @@ export function createVideoCall({ send, ack, sendFrame }) {
       if (!s) {
         if (!session) return;
         if (remoteSid) msg('bye');
-        session = null; remoteSid = ''; remoteState = { mic: true, cam: true }; relayFrameAt = 0;
+        session = null; remoteSid = ''; remoteState = { mic: false, cam: true }; relayFrameAt = 0;
         closePc(); stopMedia(); meter?.close(); meter = null;
         ui.panel.classList.add('hidden'); document.body.classList.remove('with-video');
         return;
@@ -329,13 +329,13 @@ export function createVideoCall({ send, ack, sendFrame }) {
       ui.meInitial.textContent = (s.myName || 'Y').trim().charAt(0).toUpperCase();
       if (fresh) {
         sid = Math.random().toString(36).slice(2, 10);
-        remoteSid = ''; since = performance.now(); relayFrameAt = 0;
+        remoteSid = ''; since = performance.now(); relayFrameAt = 0; want.mic = false;
         ui.panel.classList.remove('hidden'); document.body.classList.add('with-video');
         meter = meter || createMeter(ui);
         startMedia();
         if (s.oppKey) msg('hello');
       } else if (oppChanged) {
-        remoteSid = ''; remoteState = { mic: true, cam: true }; closePc();
+        remoteSid = ''; remoteState = { mic: false, cam: true }; closePc();
         since = performance.now(); relayFrameAt = 0;
         if (s.oppKey) msg('hello');
       }
