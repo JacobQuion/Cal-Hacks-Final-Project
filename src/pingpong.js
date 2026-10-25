@@ -13,20 +13,19 @@ import { connect, call, tables } from './stdb.js';
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const first = it => { for (const x of it) return x; return undefined; };
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const rand = (a, b) => a + Math.random() * (b - a);
 const G = 9.81;
 
 const HIT_Z = HALF_L + 0.25;      // where the player's paddle meets the ball (the NPC's is at −HIT_Z)
 const SIDE_DEAD = 0.12;           // tilt inside this counts as neither side
-const HOLD = 0.13;                // hit-stop on contact; a flick that lands in it still counts
-const SWING_EARLY = 0.55;         // a flick this long before contact still drives
-const LATE_UPGRADE = 0.22;        // a flick this soon after a block still upgrades it
-const GRACE = 0.2;                // a paddle that reaches the right side this soon after contact still hits
+const HOLD = 0.06;                // brief hit-stop on contact; a flick that lands in it still counts
+const SWING_EARLY = 0.8;          // a flick this long before contact still hits (and drives)
+const LATE_UPGRADE = 0.4;         // a flick this soon after a block still upgrades it
+const GRACE = 0.4;                // a paddle side or flick that arrives this soon after contact still hits
 // speed scales flight times (bigger = slower); centre = what a paddle held in the middle does.
 const LV = [
   { speed: 1.3, err: 0.22, npcSpeed: 2.2, cue: true, centre: 'block' },
-  { speed: 1.05, err: 0.13, npcSpeed: 2.9, cue: false, centre: 'miss' },
+  { speed: 1.05, err: 0.13, npcSpeed: 2.9, cue: false, centre: 'block' },
   { speed: 0.85, err: 0.07, npcSpeed: 3.6, cue: false, centre: 'miss' },
 ];
 
@@ -54,10 +53,10 @@ const say = (msg, ms = 2400) => {
 const act = (name, args = {}) => call(net.conn, name, args, say);
 
 connect({
-  subs: [tables.match, tables.device, tables.myDevice, tables.pongGame, tables.pongScore, tables.pongInput, tables.noticeEvent],
+  subs: [tables.match, tables.device, tables.myDevice, tables.pongGame, tables.pongInput, tables.noticeEvent],
   wire(conn) {
     net.conn = conn;
-    for (const t of ['match', 'device', 'myDevice', 'pongScore']) {
+    for (const t of ['match', 'device', 'myDevice']) {
       conn.db[t].onInsert(queueRefresh); conn.db[t].onDelete(queueRefresh); conn.db[t].onUpdate?.(queueRefresh);
     }
     conn.db.pongGame.onInsert(queueRefresh);
@@ -94,7 +93,6 @@ function refresh() {
   net.phoneReady = !!(ph && ph.online && ph.ready);
   net.tapMode = !!(ph && ph.tapMode);
   renderLobby();
-  renderBest();
   renderBoard();
 }
 
@@ -126,14 +124,6 @@ function renderLobby() {
   $('btnStart').disabled = !P || !net.phoneReady;
   $('btnNewGame').classList.toggle('hidden', !mid);
   for (const b of document.querySelectorAll('#levelSeg button')) b.classList.toggle('on', Number(b.dataset.level) === game.level);
-}
-
-function renderBest() {
-  const rows = [...net.conn.db.pongScore.iter()].filter(r => r.won)
-    .sort((a, b) => b.level - a.level || (b.me - b.cpu) - (a.me - a.cpu) || b.longestRally - a.longestRally).slice(0, 7);
-  $('bestList').innerHTML = rows.length
-    ? rows.map(r => `<li><span class="who"><span class="line"><b>${esc(r.name)}</b> <em>beat ${PONG_LEVELS[r.level] ?? ''} NPC</em></span><i class="pong-x">longest rally ${r.longestRally}</i></span><b class="score">${r.me}–${r.cpu}</b></li>`).join('')
-    : '<li class="hint">No wins yet. Be the first!</li>';
 }
 
 // ---------- scoreboard ----------
@@ -340,9 +330,11 @@ function onSegEnd(p, s) {
   }
 }
 
+// Forgiving: the right side hits, and so does any flick around contact, whichever way the paddle points.
+const swungLately = () => elapsed - game.lastSwing < SWING_EARLY;
 const canHit = want => {
   const have = sideOf(game.tilt);
-  return have === want || (have === 0 && LV[P?.level ?? game.level].centre === 'block');
+  return have === want || (have === 0 && LV[P?.level ?? game.level].centre === 'block') || swungLately();
 };
 function playerContact() {
   const want = ball.pos.x >= 0 ? 1 : -1;
@@ -355,7 +347,7 @@ function playerContact() {
 }
 function missed() {
   const want = ball.hitSide, have = sideOf(game.tilt);
-  const why = have === 0 ? 'Swing left or right to hit!' : `That was your ${sideName(want)}!`;
+  const why = 'Flick as the ball arrives!';
   game.why = have === 0 ? 'No paddle side' : `Wrong side: it was a ${sideName(want).toLowerCase()}`;
   ball.mode = 'free'; ball.freeT = 0;
   endPoint(false, game.why, 0.15, ['MISSED!', why]);
@@ -528,6 +520,7 @@ function stepBall(dt) {
     if (ball.freeT > 2.5) ball.mode = 'hidden';
   } else if (ball.mode === 'grace') {
     ball.graceT += dt;
+    ball.pos.addScaledVector(ball.vel, dt * 0.15);
     if (canHit(ball.hitSide)) { ball.mode = 'stuck'; ball.stuckT = 0; }
     else if (ball.graceT >= GRACE) missed();
   } else if (ball.mode === 'stuck') {
@@ -538,7 +531,7 @@ function stepBall(dt) {
 
 function update(dt) {
   game.t += dt;
-  game.tiltShown += (game.tilt - game.tiltShown) * Math.min(1, dt * 14);
+  game.tiltShown += (game.tilt - game.tiltShown) * Math.min(1, dt * 10);
   game.swingAnim = Math.max(0, game.swingAnim - dt * 4);
   npc.swing = Math.max(0, npc.swing - dt * 3.5);
 
@@ -562,13 +555,13 @@ function update(dt) {
   const p = ball.path;
   if (ball.mode === 'path' && p?.from === 'cpu' && p.kind !== 'error') {
     const c = p.segs[p.segs.length - 1].p1;
-    if (side !== 0 && side === Math.sign(c.x)) {
+    if ((side !== 0 && side === Math.sign(c.x)) || swungLately()) {
       const left = p.segs.slice(p.i).reduce((a, s) => a + s.T, 0) - p.t;
       wantX = THREE.MathUtils.lerp(c.x, wantX, clamp(left / 0.8, 0, 1));
     }
   }
-  if (ball.mode === 'stuck') wantX = ball.pos.x;
-  padX += (wantX - padX) * Math.min(1, dt * 16);
+  if (ball.mode === 'stuck' || ball.mode === 'grace') wantX = ball.pos.x;
+  padX += (wantX - padX) * Math.min(1, dt * (ball.mode === 'stuck' ? 24 : 12));
   const pad = world.paddle;
   const yawWant = game.tiltShown >= 0 ? 0.25 : Math.PI - 0.25;
   game.yaw += (yawWant - game.yaw) * Math.min(1, dt * 14);

@@ -27,11 +27,6 @@
               <span class="mode-icon">🎯</span>
               <div><h3>Badminton Solo</h3><p>Play against an NPC</p></div>
             </div>
-            <div class="seg mode-body" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
-              <button data-level="0" class="on">Easy</button>
-              <button data-level="1">Medium</button>
-              <button data-level="2">Hard</button>
-            </div>
             <button class="big-btn primary" id="btnAI">Play vs NPC</button>
           </div>
           <div class="mode">
@@ -39,17 +34,16 @@
               <span class="mode-icon red">⚔️</span>
               <div><h3>Badminton Versus</h3><p>Take on a friend</p></div>
             </div>
-            <button class="mode-note mode-body" id="btnShare">🔗 Copy a link to share</button>
             <button class="big-btn pink" id="btnCreate">Create Match</button>
           </div>
-          <div class="mode game-mode">
+          <div class="mode">
             <div class="mode-head">
               <span class="mode-icon blue">🎳</span>
               <div><h3>Bowling <span class="new-tag">NEW</span></h3><p>Swing to bowl, tilt to hook</p></div>
             </div>
             <a class="big-btn blue" id="btnBowl" href="/bowling.html">Play Bowling</a>
           </div>
-          <div class="mode game-mode">
+          <div class="mode">
             <div class="mode-head">
               <span class="mode-icon blue">🏓</span>
               <div><h3>Ping Pong <span class="new-tag">NEW</span></h3><p>Swing forehand or backhand</p></div>
@@ -95,10 +89,15 @@
       <div class="card side-card">
         <div class="room-code">Match <b id="matchCode">····</b><button class="small-btn" id="btnCopy">🔗 Copy invite</button></div>
         <div class="players" id="lobbyPlayers"></div>
+        <div class="seg hidden" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
+          <button data-level="0" class="on">Easy</button>
+          <button data-level="1">Medium</button>
+          <button data-level="2">Hard</button>
+        </div>
         <label class="opt"><input type="checkbox" id="optFog" /> <span><b>🌫️ Fog of war</b> — now and then, for 1–2 rallies, you only see the shuttle once it crosses the net <i id="optFogNote"></i></span></label>
         <label class="opt"><input type="checkbox" id="optScout" /> <span><b>🔍 Scouting report</b> — a live, private report on your opponent's weaknesses (they won't know)</span></label>
         <button class="big-btn primary" id="btnReady">✋ Ready</button>
-        <button class="small-btn" id="btnLeaveLobby">Leave</button>
+        <button class="small-btn" id="btnLeaveLobby">⌂ Back to main menu</button>
       </div>
     </div>
   </section>

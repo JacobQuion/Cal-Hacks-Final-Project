@@ -57,6 +57,7 @@ import RtcSendFrameReducer from "./rtc_send_frame_reducer";
 import RtcSignalReducer from "./rtc_signal_reducer";
 import ServeReducer from "./serve_reducer";
 import SetFogReducer from "./set_fog_reducer";
+import SetLevelReducer from "./set_level_reducer";
 import SetNameReducer from "./set_name_reducer";
 import SetPausedReducer from "./set_paused_reducer";
 import SetReadyReducer from "./set_ready_reducer";
@@ -391,6 +392,7 @@ const reducersSchema = __reducers(
   __reducerSchema("rtc_signal", RtcSignalReducer),
   __reducerSchema("serve", ServeReducer),
   __reducerSchema("set_fog", SetFogReducer),
+  __reducerSchema("set_level", SetLevelReducer),
   __reducerSchema("set_name", SetNameReducer),
   __reducerSchema("set_paused", SetPausedReducer),
   __reducerSchema("set_ready", SetReadyReducer),

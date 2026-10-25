@@ -67,7 +67,7 @@ const net = { conn: null, me: null, matchId: 0, seat: 0, spectator: false, watch
 let M = null;                     // current match row
 const game = {
   state: 'menu',                  // menu | lobby | countdown | playing | paused | results | replay
-  level: 0,
+  level: (() => { try { return Math.min(2, Number(localStorage.getItem('racket.level')) || 0); } catch { return 0; } })(),
   phase: 'idle',                  // serve | rally | point (mirrors the match row)
   incoming: null,                 // { who, seq, contactPos, contactT, land, landIn, hit }
   lastHitter: null,
@@ -417,7 +417,8 @@ function showLobby(m) {
   $('lobbyPlayers').innerHTML = row(m.nameA, m.readyA, !net.spectator && net.seat === 0) + row(m.nameB, m.readyB, !net.spectator && net.seat === 1);
   $('btnCopy').classList.toggle('hidden', ai || !!m.laptopB);
   $('btnCopy').dataset.url = `${publicBase()}/?join=${m.code}`;
-  if (inviteWaiter && !ai) { inviteWaiter($('btnCopy').dataset.url); inviteWaiter = null; }
+  $('levelSeg').classList.toggle('hidden', !ai || net.spectator);
+  for (const b of document.querySelectorAll('#levelSeg button')) b.classList.toggle('on', +b.dataset.level === m.level);
   const myReady = net.seat === 0 ? m.readyA : m.readyB;
   // The phone is the racket: no paired, calibrated phone, no match (the server refuses it too).
   const noPhone = !phone.ready && !myReady;
@@ -760,6 +761,8 @@ for (const b of document.querySelectorAll('#levelSeg button')) {
     initAudioSafe(); sfx.ui();
     document.querySelectorAll('#levelSeg button').forEach(x => x.classList.toggle('on', x === b));
     game.level = +b.dataset.level;
+    try { localStorage.setItem('racket.level', String(game.level)); } catch { /* storage unavailable */ }
+    if (M?.mode === 'ai' && M.status === 'lobby') act('setLevel', { level: game.level });
   });
 }
 // Soft tick when a home-screen button is hovered or tabbed to (audio unlocks on the first click/key).
@@ -786,20 +789,6 @@ $('btnReady').addEventListener('click', () => {
 });
 $('optFog').addEventListener('change', () => act('setFog', { on: $('optFog').checked }));
 $('optScout').addEventListener('change', () => act('setScout', { on: $('optScout').checked }));
-// "Copy a link to share": create the match and copy its invite link in one click. The code comes back
-// from the server later, so the clipboard gets a promise to keep the click's permission to write.
-let inviteWaiter = null;
-$('btnShare').addEventListener('click', () => {
-  initAudioSafe(); sfx.ui();
-  const url = new Promise(res => { inviteWaiter = res; });
-  const copied = () => say('Invite link copied. Send it to a friend!');
-  const failed = () => url.then(() => say(`Copy failed. Share code ${M?.code || ''}`));
-  const viaText = () => url.then(u => navigator.clipboard.writeText(u)).then(copied, failed);
-  try {
-    navigator.clipboard.write([new ClipboardItem({ 'text/plain': url.then(u => new Blob([u], { type: 'text/plain' })) })]).then(copied, viaText);
-  } catch { viaText(); }
-  act('createMatch', { mode: 'pvp', level: 1, name: nameNow() });
-});
 $('btnCopy').addEventListener('click', () => {
   navigator.clipboard?.writeText($('btnCopy').dataset.url).then(() => say('Invite link copied'), () => say(`Copy failed. Share code ${M?.code || ''}`));
 });

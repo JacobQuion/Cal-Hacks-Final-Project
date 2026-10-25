@@ -556,34 +556,25 @@ body.arena #menu .logo-shuttle { font-size: 40px; right: -34px; top: -10px; }
   display: grid; grid-template-columns: minmax(0, 600px) minmax(0, 380px); gap: 18px;
   width: min(998px, 100%); align-items: stretch;
 }
-.play-card { display: flex; flex-direction: column; gap: 18px; padding: 24px; }
+.play-card { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
 .play-card .field input { width: 100%; }
-.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.mode { display: flex; flex-direction: column; gap: 16px; padding: 18px; border-radius: 22px; background: var(--surface-2); }
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mode { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 20px; background: var(--surface-2); }
 .mode-head { display: flex; align-items: center; gap: 12px; }
 .mode-icon {
-  width: 48px; height: 48px; flex: none; border-radius: 15px; display: grid; place-items: center; font-size: 24px;
+  width: 42px; height: 42px; flex: none; border-radius: 13px; display: grid; place-items: center; font-size: 21px;
   background: #fff4cc; box-shadow: inset 0 0 0 2px #ffe08a;
 }
 .mode-icon.red { background: #ffe3e6; box-shadow: inset 0 0 0 2px #ffb8bf; }
-.mode-head h3 { font-weight: 900; font-size: 22px; line-height: 1.1; color: var(--ink); }
-.mode-head p { font-size: 14px; font-weight: 700; color: var(--sub); }
-/* Both modes share one middle row height, so their buttons line up. */
-.mode-body { min-height: 46px; }
-body.arena .mode .seg { background: var(--surface); }
-body.arena .mode .seg button.on { background: var(--ink); color: #fff; box-shadow: none; }
+.mode-head h3 { font-weight: 900; font-size: 20px; line-height: 1.1; color: var(--ink); white-space: nowrap; }
+.mode-head p { font-size: 13px; font-weight: 700; color: var(--sub); }
+#lobby .side-card .seg { display: grid; grid-template-columns: repeat(3, 1fr); }
 /* Each NPC level gets its own colour when picked. */
 body.arena #levelSeg button { transition: background .15s, color .15s; }
 body.arena #levelSeg button.on[data-level="0"] { background: var(--green); color: #fff; box-shadow: 0 3px 0 #15803d; }
 body.arena #levelSeg button.on[data-level="1"] { background: var(--yellow); color: var(--ink); box-shadow: 0 3px 0 var(--yellow-deep); }
 body.arena #levelSeg button.on[data-level="2"] { background: var(--red); color: #fff; box-shadow: 0 3px 0 var(--red-deep); }
-.mode-note {
-  display: flex; align-items: center; justify-content: center; border-radius: 14px; background: var(--surface);
-  font-size: 15px; font-weight: 800; color: var(--sub);
-}
-button.mode-note { width: 100%; border: 0; font-family: inherit; cursor: pointer; transition: color .15s, background .15s; }
-button.mode-note:hover { color: var(--ink); }
-.mode .big-btn { margin-top: auto; font-size: 19px; padding: 14px 16px; }
+.mode .big-btn { margin-top: auto; font-size: 18px; padding: 11px 16px; }
 
 /* contain:size lets the play card set the row height; the feed scrolls inside it. */
 .feed-card { display: flex; flex-direction: column; gap: 28px; padding: 24px; min-height: 0; contain: size; }
@@ -626,10 +617,6 @@ button.mode-note:hover { color: var(--ink); }
 }
 
 /* ---------- Bowling (bowling.html) and its homepage card ---------- */
-/* Bowling and ping pong cards: side by side under the badminton modes, compact */
-.game-mode { gap: 12px; padding: 14px 18px; }
-.game-mode .mode-head h3 { white-space: nowrap; }
-.game-mode .big-btn { padding: 12px 16px; }
 .mode-icon.blue { background: #dcecff; box-shadow: inset 0 0 0 2px #a9cdff; }
 .new-tag {
   display: inline-block; vertical-align: 3px; margin-left: 6px; padding: 2px 8px; border-radius: 999px;

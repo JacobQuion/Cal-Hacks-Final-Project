@@ -1159,6 +1159,15 @@ export const setFog = spacetimedb.reducer({ on: t.bool() }, (ctx, { on }) => {
   ctx.db.match.id.update({ ...m, fogEnabled: on });
 });
 
+export const setLevel = spacetimedb.reducer({ level: t.u8() }, (ctx, { level }) => {
+  const { m, seat } = myLaptopSeat(ctx);
+  if (m.mode !== 'ai') throw new SenderError('Only NPC matches have a level');
+  if (m.status !== 'lobby') throw new SenderError('Pick the level before the match starts');
+  if (seat !== 0) return;
+  const lv = Math.min(2, level);
+  ctx.db.match.id.update({ ...m, level: lv, nameB: `NPC · ${LEVELS[lv].name}` });
+});
+
 // ───────────────────────── play ─────────────────────────
 
 export const serve = spacetimedb.reducer({ power: t.f32(), aim: t.f32() }, (ctx, { power, aim }) => {
