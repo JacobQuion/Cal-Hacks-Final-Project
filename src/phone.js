@@ -2,7 +2,7 @@
 // detects swings from motion sensors and sends them through reducers. Feedback (hits, score,
 // secret moves, stamina) arrives through subscriptions, views and event tables.
 import { connect, call, tables } from './stdb.js';
-import { bowlState, callRoll } from '../spacetimedb/src/bowling.ts';
+import { bowlState, callRoll, laneKey } from '../spacetimedb/src/bowling.ts';
 import { pongServer } from '../spacetimedb/src/pong.ts';
 
 const $ = id => document.getElementById(id);
@@ -62,7 +62,7 @@ connect({
   wire(c) {
     conn = c;
     c.db.bowlGame.onInsert(refresh);
-    c.db.bowlGame.onUpdate?.((_c, _o, row) => { if (row.matchId === matchId) onBowlGame(row); refresh(); });
+    c.db.bowlGame.onUpdate?.((_c, _o, row) => { if (matchId && row.matchId === laneKey(matchId, seat)) onBowlGame(row); refresh(); });
     c.db.pongGame.onInsert(refresh);
     c.db.pongGame.onUpdate?.((_c, o, row) => { if (row.matchId === matchId) onPongGame(o, row); refresh(); });
     for (const t of ['match', 'myShot', 'myDevice', 'mySecret', 'myStamina', 'myRead']) {
@@ -108,9 +108,9 @@ function refresh() {
   paired = nowPaired;
   matchId = d?.matchId || 0;
   const m = matchId ? [...conn.db.match.iter()].find(x => x.id === matchId) : null;
-  if (m && m.mode === 'bowl' && !bowlMode) { bowlMode = true; bowlTexts(); if (stage === 'play') show('s-bowl'); }
+  if (m && (m.mode === 'bowl' || m.mode === 'bowlvs') && !bowlMode) { bowlMode = true; bowlTexts(); if (stage === 'play') show('s-bowl'); }
   if (bowlMode) return bowlRefresh();
-  if (m && m.mode === 'pong' && !pongMode) { pongMode = true; pongTexts(); if (stage === 'play') show('s-pong'); }
+  if (m && (m.mode === 'pong' || m.mode === 'pongvs') && !pongMode) { pongMode = true; pongTexts(); if (stage === 'play') show('s-pong'); }
   if (pongMode) return pongRefresh();
   if (m) {
     const me = seat === 0 ? m.scoreA : m.scoreB, op = seat === 0 ? m.scoreB : m.scoreA;
@@ -153,7 +153,18 @@ function bowlTexts() {
   document.querySelector('#s-center p').innerHTML = 'Hold the phone in your bowling hand, <b>screen up, top pointing at the laptop</b>. Then tap the button.';
   document.querySelector('#s-swing .illus').textContent = '🎳';
 }
-function bowlGame() { return matchId ? conn?.db.bowlGame.matchId.find(matchId) : null; }
+function bowlGame() { return matchId ? conn?.db.bowlGame.matchId.find(laneKey(matchId, seat)) : null; }
+const curMatch = () => (matchId ? [...conn.db.match.iter()].find(x => x.id === matchId) : null);
+/** 1v1 (pongvs / bowlvs): what to tell the player outside of play, or '' while the game is on. */
+function versusPrompt(m, verb) {
+  if (!m || (m.mode !== 'pongvs' && m.mode !== 'bowlvs')) return '';
+  const opp = (seat === 0 ? m.nameB : m.nameA) || 'player 2';
+  if (m.status === 'lobby') return (seat === 0 ? m.readyA : m.readyB) ? `Ready — waiting for ${opp}` : `${verb} to ready up!`;
+  if (m.status === 'countdown') return 'Get ready…';
+  if (m.status === 'paused') return `Paused — ${m.pausedReason}`;
+  if (m.status === 'over') return m.winner === seat ? `🏆 You beat ${opp}! ${verb} for a rematch` : m.winner === 255 ? `Tie! ${verb} for a rematch` : `${opp} wins — ${verb.toLowerCase()} for a rematch`;
+  return '';
+}
 function bowlRefresh() {
   const g = bowlGame();
   if (!g) return;
@@ -161,7 +172,10 @@ function bowlRefresh() {
   $('bScore').textContent = st.done ? `Final · ${st.score}` : `Frame ${st.frame + 1} · ${st.score}`;
   if (seenRolls === null) seenRolls = [...g.rolls];
   if (performance.now() < msgUntil) return;
+  const vs = versusPrompt(curMatch(), 'Swing');
   if (stage !== 'play') setBowlPrompt('Finish calibrating first');
+  else if (vs) setBowlPrompt(vs);
+  else if (st.done && curMatch()?.mode === 'bowlvs') setBowlPrompt(`🏁 ${st.score}! Waiting for your opponent`);
   else if (st.done) setBowlPrompt(`🏁 ${st.score}! Swing to bowl again`);
   else setBowlPrompt(`Frame ${st.frame + 1} · Ball ${st.ball + 1}: swing to bowl!`);
 }
@@ -218,17 +232,21 @@ function pongGame() { return matchId ? conn?.db.pongGame.matchId.find(matchId) :
 function pongRefresh() {
   const g = pongGame();
   if (!g) return;
-  $('tScore').textContent = `${g.me} – ${g.cpu}`;
+  const m = curMatch(), mine = seat === 1 ? g.cpu : g.me, theirs = seat === 1 ? g.me : g.cpu;
+  const opp = m?.mode === 'pongvs' ? (seat === 0 ? m.nameB : m.nameA) || 'Opponent' : 'NPC';
+  $('tScore').textContent = `${mine} – ${theirs}`;
   if (performance.now() < pongMsgUntil) return;
+  const vs = versusPrompt(m, 'Flick');
   if (stage !== 'play') setPongPrompt('Finish calibrating first');
-  else if (g.done) setPongPrompt(g.me > g.cpu ? `🏆 You win ${g.me}–${g.cpu}! Flick to play again` : `NPC wins ${g.cpu}–${g.me}. Flick for a rematch`);
-  else if (pongServer(g.me, g.cpu, g.firstServer) === 0) setPongPrompt(tapMode ? 'Your serve: tap!' : 'Your serve: flick!');
-  else setPongPrompt('NPC serving… point to the ball');
+  else if (vs) setPongPrompt(vs);
+  else if (g.done) setPongPrompt(mine > theirs ? `🏆 You win ${mine}–${theirs}! Flick to play again` : `${opp} wins ${theirs}–${mine}. Flick for a rematch`);
+  else if (pongServer(g.me, g.cpu, g.firstServer) === seat) setPongPrompt(tapMode ? 'Your serve: tap!' : 'Your serve: flick!');
+  else setPongPrompt(`${opp} serving… point to the ball`);
 }
 function onPongGame(o, g) {
   if (g.seq !== o.seq + 1 || g.me + g.cpu !== o.me + o.cpu + 1) { pongMsgUntil = 0; return; }
-  const won = g.me > o.me;
-  $('tLast').textContent = won ? 'Point! 🎉' : 'NPC point';
+  const won = seat === 1 ? g.cpu > o.cpu : g.me > o.me;
+  $('tLast').textContent = won ? 'Point! 🎉' : curMatch()?.mode === 'pongvs' ? 'Their point' : 'NPC point';
   $('tGrade').textContent = g.last;
   setPongPrompt(won ? `Point! ${g.last}` : g.last);
   pongMsgUntil = performance.now() + 1800;
