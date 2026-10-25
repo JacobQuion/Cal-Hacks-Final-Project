@@ -193,6 +193,7 @@ connect({
     act('setName', { name: nameNow() });
     const join = (params.get('join') || '').toUpperCase();
     if (join) {
+      net.joined = true;
       act('joinMatch', { code: join, name: nameNow() });
       params.delete('join'); history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
     }
@@ -231,8 +232,10 @@ function refresh() {
   net.matchId = matchId;
   net.seat = !net.spectator && d && d.seat !== 255 ? d.seat : 0;
   M = matchId ? [...conn.db.match.iter()].find(m => m.id === matchId) || null : null;
+  // Joined a ping pong or bowling 1v1 from an invite link: that game's page runs it.
+  if (M && net.joined && (M.mode === 'pongvs' || M.mode === 'bowlvs')) { location.replace(M.mode === 'pongvs' ? '/pingpong.html' : '/bowling.html'); return; }
   // Back from the bowling or ping pong page (same tab, same identity): close it, show the menu.
-  if (M && (M.mode === 'bowl' || M.mode === 'pong')) {
+  if (M && (M.mode === 'bowl' || M.mode === 'pong' || M.mode === 'pongvs' || M.mode === 'bowlvs')) {
     if (!net.spectator && net.leftBowl !== M.id) { net.leftBowl = M.id; act('leaveMatch'); }
     M = null; net.matchId = 0;
   }
@@ -309,7 +312,12 @@ function renderLive() {
     .filter(m => (m.status === 'playing' || m.status === 'paused' || m.status === 'countdown') && m.id !== net.matchId)
     .slice(0, 6);
   $('liveList').innerHTML = live.length
-    ? live.map(m => `<li><span class="who">${esc(m.nameA)} <em>vs</em> ${esc(m.nameB)}</span><b class="score">${m.scoreA}–${m.scoreB}</b><button class="small-btn" data-watch="${m.code}">Watch</button></li>`).join('')
+    ? live.map(m => {
+      // Only badminton can be watched from here; ping pong and bowling 1v1s just show their score.
+      const icon = m.mode === 'pongvs' ? '🏓 ' : m.mode === 'bowlvs' ? '🎳 ' : '';
+      const watch = icon ? '' : `<button class="small-btn" data-watch="${m.code}">Watch</button>`;
+      return `<li><span class="who">${icon}${esc(m.nameA)} <em>vs</em> ${esc(m.nameB)}</span><b class="score">${m.scoreA}–${m.scoreB}</b>${watch}</li>`;
+    }).join('')
     : '<li class="hint">No matches being played</li>';
 }
 $('liveList').addEventListener('click', e => {
