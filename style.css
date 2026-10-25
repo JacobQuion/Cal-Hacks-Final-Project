@@ -558,23 +558,62 @@ body.arena #menu .logo-shuttle { font-size: 40px; right: -34px; top: -10px; }
 }
 .play-card { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
 .play-card .field input { width: 100%; }
-.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.mode { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 20px; background: var(--surface-2); }
-.mode-head { display: flex; align-items: center; gap: 12px; }
-.mode-icon {
-  width: 42px; height: 42px; flex: none; border-radius: 13px; display: grid; place-items: center; font-size: 21px;
-  background: #fff4cc; box-shadow: inset 0 0 0 2px #ffe08a;
+/* Players toggle: two big halves, the picked one filled (blue = solo, red = doubles). */
+.pick { display: flex; flex-direction: column; gap: 7px; }
+.pick-label { font-size: 12px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; color: var(--sub); }
+.play-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 5px; border-radius: 20px; background: var(--surface-2); }
+.play-seg button {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 0; border-radius: 15px; cursor: pointer;
+  background: transparent; color: var(--sub); font: inherit; text-align: left;
+  transition: background .15s, color .15s, box-shadow .15s, transform .16s var(--spring);
 }
-.mode-icon.red { background: #ffe3e6; box-shadow: inset 0 0 0 2px #ffb8bf; }
-.mode-head h3 { font-weight: 900; font-size: 20px; line-height: 1.1; color: var(--ink); white-space: nowrap; }
-.mode-head p { font-size: 13px; font-weight: 700; color: var(--sub); }
+.play-seg button:hover { background: rgba(255, 255, 255, .6); }
+.play-seg b { display: block; font-size: 20px; font-weight: 900; line-height: 1.1; }
+.play-seg small { display: block; font-size: 13px; font-weight: 700; }
+.ps-icon { font-size: 26px; filter: grayscale(.6); opacity: .7; transition: filter .15s, opacity .15s; }
+.play-seg button.on { color: #fff; }
+.play-seg button.on .ps-icon { filter: none; opacity: 1; }
+.play-seg button.on[data-play="solo"] { background: var(--blue); box-shadow: 0 4px 0 var(--blue-deep); }
+.play-seg button.on[data-play="vs"] { background: var(--red); box-shadow: 0 4px 0 var(--red-deep); }
+.play-seg button:focus-visible, .game-btn:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+#menuLevelSeg { display: grid; grid-template-columns: repeat(3, 1fr); }
+/* Three games: click one and you're in. The line under each says what you'll get. */
+.games { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.game-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 8px 14px; cursor: pointer;
+  border: 0; border-radius: 20px; font: inherit; color: var(--ink);
+  background: var(--yellow); box-shadow: 0 5px 0 var(--yellow-deep);
+  transition: transform .16s var(--spring), box-shadow .12s, filter .15s;
+}
+.game-btn:hover { transform: translateY(-3px); filter: brightness(1.05); }
+.game-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--yellow-deep); }
+.game-icon { font-size: 36px; line-height: 1.1; }
+.game-btn b { font-size: 19px; font-weight: 900; white-space: nowrap; }
+.game-sub { font-size: 12px; font-weight: 800; color: rgba(28, 32, 51, .65); white-space: nowrap; }
+.play-card.doubles .game-btn { background: var(--red); color: #fff; box-shadow: 0 5px 0 var(--red-deep); }
+.play-card.doubles .game-sub { color: rgba(255, 255, 255, .85); }
+.play-card .join-row input { padding: 10px; font-size: 16px; }
+/* Lobby: says loud and clear whether this is solo or doubles. */
+.mode-banner {
+  display: flex; flex-direction: column; gap: 1px; padding: 10px 14px; border-radius: 16px;
+  background: var(--blue); color: #fff; box-shadow: 0 4px 0 var(--blue-deep);
+}
+.mode-banner.doubles { background: var(--red); box-shadow: 0 4px 0 var(--red-deep); }
+.mode-banner b { font-size: 20px; font-weight: 900; font-style: italic; letter-spacing: 1px; line-height: 1.15; }
+.mode-banner span { font-size: 13px; font-weight: 800; opacity: .9; }
+.mode-banner:empty { display: none; }
+.qr-wait { display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 13px; font-weight: 800; color: var(--sub); }
+.spinner {
+  width: 30px; height: 30px; border-radius: 50%; border: 4px solid var(--line); border-top-color: var(--yellow);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 #lobby .side-card .seg { display: grid; grid-template-columns: repeat(3, 1fr); }
 /* Each NPC level gets its own colour when picked. */
-body.arena #levelSeg button { transition: background .15s, color .15s; }
-body.arena #levelSeg button.on[data-level="0"] { background: var(--green); color: #fff; box-shadow: 0 3px 0 #15803d; }
-body.arena #levelSeg button.on[data-level="1"] { background: var(--yellow); color: var(--ink); box-shadow: 0 3px 0 var(--yellow-deep); }
-body.arena #levelSeg button.on[data-level="2"] { background: var(--red); color: #fff; box-shadow: 0 3px 0 var(--red-deep); }
-.mode .big-btn { margin-top: auto; font-size: 18px; padding: 11px 16px; }
+body.arena .level-seg button { transition: background .15s, color .15s; }
+body.arena .level-seg button.on[data-level="0"] { background: var(--green); color: #fff; box-shadow: 0 3px 0 #15803d; }
+body.arena .level-seg button.on[data-level="1"] { background: var(--yellow); color: var(--ink); box-shadow: 0 3px 0 var(--yellow-deep); }
+body.arena .level-seg button.on[data-level="2"] { background: var(--red); color: #fff; box-shadow: 0 3px 0 var(--red-deep); }
 
 /* contain:size lets the play card set the row height; the feed scrolls inside it. */
 .feed-card { display: flex; flex-direction: column; gap: 28px; padding: 24px; min-height: 0; contain: size; }
@@ -613,7 +652,10 @@ body.arena #levelSeg button.on[data-level="2"] { background: var(--red); color: 
   #menu { justify-content: flex-start; overflow-y: auto; }
 }
 @media (max-width: 520px) {
-  .modes { grid-template-columns: 1fr; }
+  .games { grid-template-columns: 1fr; }
+  .game-btn { flex-direction: row; justify-content: flex-start; gap: 12px; padding: 12px 16px; }
+  .game-icon { font-size: 28px; }
+  .game-sub { margin-left: auto; }
 }
 
 /* ---------- Bowling (bowling.html) and its homepage card ---------- */
