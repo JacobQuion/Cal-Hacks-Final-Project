@@ -426,7 +426,7 @@ body.arena .end-btns .small-btn.primary { background: linear-gradient(180deg, #f
 body.with-video .screen:not(#lobby):not(#pause) { padding-right: calc(var(--video-w) + 40px); }
 /* Docked in the lobby: a third card in the row, as tall as its neighbours. */
 .video-panel.docked {
-  position: static; transform: none; align-self: stretch; width: clamp(240px, 24vw, 360px);
+  position: static; transform: none; align-self: stretch; width: clamp(220px, 20vw, 300px);
   padding: 12px; border-radius: 28px; gap: 10px;
 }
 .video-panel.docked .vtile { flex: 1 1 0; min-height: 96px; aspect-ratio: auto; }
@@ -435,7 +435,7 @@ body.with-video #callout, body.with-video #subcallout { right: calc(var(--video-
 @media (max-width: 760px) {
   .video-panel { width: 168px; top: auto; bottom: 150px; transform: none; }
   body.with-video .screen { padding-right: 16px; }
-  .video-panel.docked { width: min(360px, 94vw); }
+  .video-panel.docked { width: min(300px, 94vw); }
   body.with-video #callout, body.with-video #subcallout { right: 22px; bottom: 360px; }
 }
 
