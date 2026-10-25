@@ -420,6 +420,10 @@ function showLobby(m) {
   $('endBar').classList.add('hidden');
   $('matchCode').textContent = m.code;
   const ai = m.mode === 'ai';
+  const banner = $('modeBanner');
+  banner.classList.toggle('doubles', !ai);
+  banner.innerHTML = net.spectator ? '<b>👀 SPECTATING</b><span>watching a live match</span>'
+    : ai ? `<b>🤖 SOLO</b><span>vs the NPC · ${LEVEL_NAMES[m.level] ?? ''}</span>` : '<b>👥 DOUBLES</b><span>1v1 against a friend</span>';
   const row = (name, ready, isMe) => `<div class="pl ${ready ? 'ready' : ''}"><span>${esc(name || 'Waiting for player 2…')}${isMe ? ' (you)' : ''}</span><b>${name ? (ready ? '✔ Ready' : '…') : ''}</b></div>`;
   $('lobbyPlayers').innerHTML = row(m.nameA, m.readyA, !net.spectator && net.seat === 0) + row(m.nameB, m.readyB, !net.spectator && net.seat === 1);
   $('btnCopy').classList.toggle('hidden', ai || !!m.laptopB);
@@ -669,7 +673,7 @@ function toMenu() {
   $('scoutPanel').classList.add('hidden');
   fx.setZone(null);
   world.setScoreboard(null);
-  hud.show(false); showScreen('menu');
+  hud.show(false); showScreen('menu'); renderMenuPick();
   syncVideo();
   shuttle.active = false; fx.setTiming(null, null); fx.setLanding(null);
 }
@@ -785,10 +789,60 @@ $('menu').addEventListener('focusin', onMenuSelect);
 $('menu').addEventListener('pointerleave', () => { hoverBtn = null; });
 window.addEventListener('pointerdown', initAudioSafe, { once: true });
 window.addEventListener('keydown', initAudioSafe, { once: true });
-$('btnAI').addEventListener('click', () => { initAudioSafe(); sfx.ui(); act('createMatch', { mode: 'ai', level: game.level, name: nameNow() }); });
-$('btnBowl').addEventListener('click', () => { initAudioSafe(); sfx.ui(); try { localStorage.setItem('racket.name', nameNow()); } catch { /* storage unavailable */ } });
-$('btnPong').addEventListener('click', () => { initAudioSafe(); sfx.ui(); try { localStorage.setItem('racket.name', nameNow()); } catch { /* storage unavailable */ } });
-$('btnCreate').addEventListener('click', () => { initAudioSafe(); sfx.ui(); act('createMatch', { mode: 'pvp', level: 1, name: nameNow() }); });
+// ---------- title menu: Solo / Doubles, then NPC level (solo), then one of the three games ----------
+const LEVEL_NAMES = ['Easy', 'Medium', 'Hard'];
+const menu = { play: (() => { try { return localStorage.getItem('racket.play') === 'vs' ? 'vs' : 'solo'; } catch { return 'solo'; } })() };
+function renderMenuPick() {
+  const vs = menu.play === 'vs';
+  for (const b of document.querySelectorAll('#playSeg button')) {
+    const on = b.dataset.play === menu.play;
+    b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on));
+  }
+  for (const b of document.querySelectorAll('#menuLevelSeg button')) b.classList.toggle('on', +b.dataset.level === game.level);
+  $('levelPick').classList.toggle('hidden', vs);
+  $('joinPick').classList.toggle('hidden', !vs);
+  document.querySelector('.play-card').classList.toggle('doubles', vs);
+  const lvl = LEVEL_NAMES[game.level];
+  const subs = vs ? { badminton: '1v1 · invite a friend', pong: '1v1 · invite a friend', bowl: '1v1 · invite a friend' }
+    : { badminton: `vs NPC · ${lvl}`, pong: `vs NPC · ${lvl}`, bowl: 'Solo lane' };
+  for (const b of document.querySelectorAll('.game-btn')) b.querySelector('.game-sub').textContent = subs[b.dataset.game];
+}
+for (const b of document.querySelectorAll('#playSeg button')) {
+  b.addEventListener('click', () => {
+    initAudioSafe(); sfx.ui();
+    menu.play = b.dataset.play;
+    try { localStorage.setItem('racket.play', menu.play); } catch { /* storage unavailable */ }
+    renderMenuPick();
+  });
+}
+for (const b of document.querySelectorAll('#menuLevelSeg button')) {
+  b.addEventListener('click', () => {
+    initAudioSafe(); sfx.ui();
+    game.level = +b.dataset.level;
+    try { localStorage.setItem('racket.level', String(game.level)); } catch { /* storage unavailable */ }
+    renderMenuPick();
+  });
+}
+for (const b of document.querySelectorAll('.game-btn')) {
+  b.addEventListener('click', () => {
+    initAudioSafe(); sfx.ui();
+    const vs = menu.play === 'vs';
+    try { localStorage.setItem('racket.name', nameNow()); } catch { /* storage unavailable */ }
+    if (b.dataset.game === 'badminton') { act('createMatch', { mode: vs ? 'pvp' : 'ai', level: vs ? 1 : game.level, name: nameNow() }); return; }
+    // Ping pong and bowling have their own pages; ?play tells them what to set up.
+    const page = b.dataset.game === 'pong' ? '/pingpong.html' : '/bowling.html';
+    location.href = `${page}?play=${menu.play}${!vs && b.dataset.game === 'pong' ? `&level=${game.level}` : ''}`;
+  });
+}
+const menuJoin = () => {
+  const code = $('menuJoinInput').value.trim().toUpperCase();
+  if (!code) return;
+  sfx.ui(); net.joined = true;
+  act('joinMatch', { code, name: nameNow() });
+};
+$('btnMenuJoin').addEventListener('click', menuJoin);
+$('menuJoinInput').addEventListener('keydown', e => { if (e.key === 'Enter') menuJoin(); });
+renderMenuPick();
 $('btnReady').addEventListener('click', () => {
   initAudioSafe(); sfx.ui();
   if (!M) return;
