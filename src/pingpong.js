@@ -34,6 +34,10 @@ const LV = [
 ];
 const VS = { speed: 0.97, centre: 'block', npcSpeed: 4.5 };   // 1v1: Medium pace; npcSpeed moves the opponent's avatar
 const IDLE_SERVE = 15;                          // 1v1: auto serve after this long
+// 1v1 lag hiding: the other laptop starts our shot only when it arrives, and its return takes the same trip
+// back, so our ball would sit at their paddle for a round trip. Instead we play our own shot slower by
+// about that much (learned from how long we actually waited), so their return lands as our ball gets there.
+const LAG = { est: 0.35, min: 0, max: 1.2, learn: 0.5 };
 
 const world = createPongWorld($('game'));
 const params = new URLSearchParams(location.search);
@@ -329,7 +333,7 @@ function nextPoint() {
   if (P.done) return showEnd();
   if (net.vs && M?.status !== 'playing') return;
   game.server = pongServer(P.me, P.cpu, P.firstServer) === net.seat ? 0 : 1;
-  game.state = 'serve'; game.t = 0; game.rally = 0; game.pointPerfects = 0; game.sideStreak = 0;
+  game.state = 'serve'; game.t = 0; game.rally = 0; game.pointPerfects = 0; game.sideStreak = 0; game.queuedShot = null;
   $('rallyChip').textContent = 'Rally 0';
   ball.mode = 'hold'; ball.path = null;
   world.marker.hide();
@@ -352,7 +356,7 @@ function onPhone(e) {
   if (game.state === 'serve' && game.server === 0 && game.t > 0.4) return playerServe(game.lastPower);
   // A flick just after a block still turns it into a drive.
   const p = ball.path;
-  if (game.state === 'rally' && ball.mode === 'path' && p?.from === 'you' && p.kind === 'block' && p.i === 0 && p.t < LATE_UPGRADE) {
+  if (game.state === 'rally' && ball.mode === 'path' && p?.from === 'you' && p.kind === 'block' && p.i === 0 && p.t / p.rate < LATE_UPGRADE) {
     game.rally--;
     playerReturn('LATE', game.lastPower, ball.pos.clone());
   }
@@ -379,8 +383,14 @@ function seg(p0, p1, T, g, end) {
   return { p0: p0.clone(), p1: p1.clone(), T, g, end };
 }
 function launchPath(from, segs, extra = {}) {
-  ball.path = { from, segs, i: 0, t: 0, ...extra };
+  ball.path = { from, segs, i: 0, t: 0, rate: 1, ...extra };
   ball.mode = 'path';
+}
+/** 1v1: our own shot, stretched on our screen by the learned lag (the opponent gets it at full speed). */
+function launchOwn(segs, extra) {
+  const total = segs.reduce((a, s) => a + s.T, 0);
+  const lag = net.vs ? LAG.est : 0;
+  launchPath('you', segs, { ...extra, rate: total / (total + lag), lag });
 }
 const bounceY = TOP + BALL_R;
 
@@ -431,7 +441,7 @@ function playerServe(power) {
   const tx = -(Math.sign(npc.paddleX) || 1) * rand(0.25, 0.5);
   const b1 = V(start.x * 0.6, bounceY, 0.7), b2 = V(tx, bounceY, -rand(0.8, 1.05));
   const T = 0.52 - clamp(power, 0, 1.2) * 0.1;
-  launchPath('you', [seg(start, b1, 0.3, G, 'bounce'), seg(b1, b2, T, G, 'bounce'), seg(b2, V(tx * 1.2, rand(0.92, 1), -HIT_Z), 0.4, G, 'contact')], { kind: 'serve', quality: 0.15 });
+  launchOwn([seg(start, b1, 0.3, G, 'bounce'), seg(b1, b2, T, G, 'bounce'), seg(b2, V(tx * 1.2, rand(0.92, 1), -HIT_Z), 0.4, G, 'contact')], { kind: 'serve', quality: 0.15 });
   sendHit(power);
   npc.target = tx * 1.2;
   world.marker.hide();
@@ -455,7 +465,7 @@ function playerReturn(grade, power, from) {
   const gv = drive ? G + 6 * pw : G;
   const b = V(tx, bounceY, tz), c = V(clamp(tx * 1.25, -0.95, 0.95), rand(0.9, 1.02), -HIT_Z);
   const quality = drive ? clamp(0.3 + 0.5 * q + 0.2 * pw, 0, 1) : 0;
-  launchPath('you', [seg(from, b, T1, gv, 'bounce'), seg(b, c, T2, G, 'contact')], { kind: drive ? 'drive' : 'block', quality, grade });
+  launchOwn([seg(from, b, T1, gv, 'bounce'), seg(b, c, T2, G, 'contact')], { kind: drive ? 'drive' : 'block', quality, grade });
   npc.target = c.x;
   game.rally++;
   sendHit(pw);
@@ -530,9 +540,18 @@ function sendHit(power) {
   call(net.conn, 'pongHit', { seq: P.seq, data: JSON.stringify(data) }, say);
 }
 /** The opponent hit the ball: play their flight from our end of the table. */
-function onOppShot(e) {
+function onOppShot(e, queued = false) {
   if (!P || e.seq !== P.seq) return;
   if (!(game.state === 'rally' || (game.state === 'serve' && game.server === 1))) return;
+  const p = ball.path;
+  if (ball.mode === 'path' && p?.from === 'you') {
+    // Their return beat our ball to their paddle: we stretched too much. Play it when our ball gets there.
+    const left = (p.segs.slice(p.i).reduce((a, s) => a + s.T, 0) - p.t) / p.rate;
+    learnLag(p.lag - left);
+    game.queuedShot = e;
+    return;
+  }
+  if (!queued && ball.mode === 'wait' && p?.from === 'you') learnLag(p.lag + ball.waitT);   // too little: add what we waited
   let d;
   try { d = JSON.parse(e.data); } catch { return; }
   const mirror = a => V(-a[0], a[1], -a[2]);
@@ -552,9 +571,19 @@ function onOppShot(e) {
   sfx.paddle(d.kind === 'drive' ? 0.45 + d.power * 0.5 : 0.4);
 }
 
+function learnLag(target) {
+  LAG.est = clamp(LAG.est + (target - LAG.est) * LAG.learn, LAG.min, LAG.max);
+}
+
 function npcContact() {
-  // 1v1: our shot reached the other player. Their laptop decides; hold the ball there until it does.
-  if (net.vs) { ball.mode = 'wait'; ball.waitT = 0; return; }
+  // 1v1: our shot reached the other player. Their laptop decides; hold the ball there until it does
+  // (or play their return straight away if it is already here).
+  if (net.vs) {
+    ball.mode = 'wait'; ball.waitT = 0;
+    const q = game.queuedShot; game.queuedShot = null;
+    if (q) onOppShot(q, true);
+    return;
+  }
   const p = ball.path, L = LV[P?.level ?? game.level];
   const reach = Math.abs(npc.paddleX - ball.pos.x) < 0.16;
   if (!reach) {
@@ -718,7 +747,7 @@ function paddleX() { return padX; }
 function stepBall(dt) {
   if (ball.mode === 'path') {
     const p = ball.path;
-    p.t += dt;
+    p.t += dt * p.rate;
     while (ball.mode === 'path' && ball.path === p && p.t >= p.segs[p.i].T) {
       const s = p.segs[p.i];
       p.t -= s.T;
