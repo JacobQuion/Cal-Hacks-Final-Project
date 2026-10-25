@@ -13,7 +13,8 @@ const code = (params.get('code') || '').toUpperCase();
 const seat = Number(params.get('seat') || 0);
 // Bowling lane (bowling.html): the phone is the ball. Turn to aim, tilt to hook, swing underhand to bowl.
 let bowlMode = params.get('game') === 'bowl';
-// Ping pong table (pingpong.html): the phone is the paddle. Tilt right = forehand, left = backhand, flick to drive.
+// Ping pong table (pingpong.html): the phone is the paddle, held edge up. Point it right = forehand,
+// left = backhand (like taking the paddle back for the stroke), flick to drive.
 let pongMode = params.get('game') === 'pong';
 
 // ---------- tuning ----------
@@ -26,15 +27,15 @@ const TWIST_RATIO = 0.6;                           // share of rotation around t
 const HOOK_RANGE_DEG = 35;                         // bowling: wrist tilt that maps to full hook
 const HOOK_DEAD_DEG = 5;
 const BACKSWING_MS = 750;                          // bowling: a lone "down" swing still bowls after this long
-const PONG_RANGE_DEG = 28;                         // ping pong: wrist tilt that maps to a full forehand/backhand
-const PONG_DEAD_DEG = 3;
+const PONG_RANGE_DEG = 24;                         // ping pong: turn left/right that maps to a full backhand/forehand
+const PONG_DEAD_DEG = 2;
 
 const cal = { ...DEFAULT_CAL, ...loadCal() };
 let center = null;           // heading (deg) when "Set center" was tapped
 let heading = null, pitch = 0, aim = 0;
 let tilt = 0, tiltCenter = 0, spin = 0;     // bowling: wrist tilt around the phone's long axis → hook
 let steadyAim = 0, steadySpin = 0;          // aim and hook held while the phone is still (a swing smears both)
-let paddleTilt = 0, steadyTilt = 0;         // ping pong: −1 backhand … +1 forehand
+let paddleTilt = 0, steadyTilt = 0;         // ping pong: −1 backhand … +1 forehand, from where the phone points
 let pendingRoll = null, lastRollAt = 0;
 const pitchLog = [];         // recent { t, pitch } samples, to see which way a swing travelled
 let stage = 'connect';       // connect | motion | center | gentle | hard | play
@@ -210,7 +211,7 @@ let pongMsgUntil = 0;
 function pongTexts() {
   document.querySelector('#s-motion h2').textContent = 'Your phone is the paddle';
   document.querySelector('#s-motion .illus').textContent = '🏓';
-  document.querySelector('#s-center p').innerHTML = 'Hold the phone like a paddle handle, <b>screen up, top pointing at the laptop</b>. Then tap the button.';
+  document.querySelector('#s-center p').innerHTML = 'Hold the phone like a paddle: <b>edge up, screen facing sideways, top pointing at the laptop</b>. Then tap the button.';
   document.querySelector('#s-swing .illus').textContent = '🏓';
 }
 function pongGame() { return matchId ? conn?.db.pongGame.matchId.find(matchId) : null; }
@@ -222,7 +223,7 @@ function pongRefresh() {
   if (stage !== 'play') setPongPrompt('Finish calibrating first');
   else if (g.done) setPongPrompt(g.me > g.cpu ? `🏆 You win ${g.me}–${g.cpu}! Flick to play again` : `NPC wins ${g.cpu}–${g.me}. Flick for a rematch`);
   else if (pongServer(g.me, g.cpu, g.firstServer) === 0) setPongPrompt(tapMode ? 'Your serve: tap!' : 'Your serve: flick!');
-  else setPongPrompt('NPC serving… tilt to the ball');
+  else setPongPrompt('NPC serving… point to the ball');
 }
 function onPongGame(o, g) {
   if (g.seq !== o.seq + 1 || g.me + g.cpu !== o.me + o.cpu + 1) { pongMsgUntil = 0; return; }
@@ -299,7 +300,6 @@ function onOrientation(e) {
   if (e.gamma != null) tilt = Math.asin(clamp(cB * Math.sin(e.gamma * r), -1, 1)) / r;
   const dt = tilt - tiltCenter, mag = Math.max(0, Math.abs(dt) - HOOK_DEAD_DEG);
   spin = clamp(Math.sign(dt) * mag / (HOOK_RANGE_DEG - HOOK_DEAD_DEG), -1, 1);
-  paddleTilt = clamp(Math.sign(dt) * Math.max(0, Math.abs(dt) - PONG_DEAD_DEG) / (PONG_RANGE_DEG - PONG_DEAD_DEG), -1, 1);
   const now = performance.now();
   pitchLog.push({ t: now, pitch });
   while (pitchLog.length && now - pitchLog[0].t > 600) pitchLog.shift();
@@ -307,6 +307,8 @@ function onOrientation(e) {
     let d = heading - center;
     d = ((d + 540) % 360) - 180;
     aim = clamp(d / AIM_RANGE_DEG, -1, 1);
+    // Ping pong: the heading is where the top of the phone points, whatever the grip (edge up works).
+    paddleTilt = clamp(Math.sign(d) * Math.max(0, Math.abs(d) - PONG_DEAD_DEG) / (PONG_RANGE_DEG - PONG_DEAD_DEG), -1, 1);
   }
 }
 
@@ -314,7 +316,7 @@ function onOrientation(e) {
 let swing = null, lastSwingEnd = 0, meterVal = 0;
 function onMotion(e) {
   const rr = e.rotationRate;
-  // Ping pong: tilting around the long axis picks forehand/backhand, so it mustn't count as a flick.
+  // Ping pong: twisting the paddle face (around the long axis) isn't a flick.
   const gyro = rr ? Math.hypot(rr.alpha || 0, rr.beta || 0, pongMode ? 0 : rr.gamma || 0) / 360 : 0;
   let acc = 0;
   if (e.acceleration && e.acceleration.x != null) acc = Math.hypot(e.acceleration.x, e.acceleration.y, e.acceleration.z) / 14;
@@ -400,7 +402,7 @@ function recordCalibration(peak) {
 
 function startPlay() {
   stage = 'play'; show(pongMode ? 's-pong' : bowlMode ? 's-bowl' : 's-play'); playSince = performance.now();
-  $('tHint').textContent = tapMode ? 'Tap the left half for backhand, the right half for forehand' : 'Tilt right = forehand · left = backhand · flick to smash';
+  $('tHint').textContent = tapMode ? 'Tap the left half for backhand, the right half for forehand' : 'Swing right = forehand · left = backhand · flick to smash';
   $('bHint').textContent = tapMode ? 'Swipe up to bowl: start left/right to aim, curve the swipe to hook' : 'Tilt to hook, then swing underhand';
   $('tapHint').textContent = tapMode ? 'Tap: top = smash · middle = clear · bottom = lift · left/right = aim' : 'Swing your phone — or tap here';
   sendStatus();

@@ -5,9 +5,9 @@ import { pongServer, PONG_LEVELS } from '../spacetimedb/src/pong.ts';
 import { initAudio, sfx } from './audio.js';
 import { connect, call, tables } from './stdb.js';
 
-// Ping pong: the phone is the paddle. Tilt it right for a forehand, left for a backhand: if the paddle
+// Ping pong: the phone is the paddle. Swing it right for a forehand, left for a backhand: if the paddle
 // is on the side the ball comes to, it hits. A flick as the ball arrives turns the block into a drive.
-// Tilt and flicks arrive through SpacetimeDB (pong_input); the rally runs here and each point goes to
+// Paddle side and flicks arrive through SpacetimeDB (pong_input); the rally runs here and each point goes to
 // the database (pong_point), which keeps score and ends the game at 11.
 
 const $ = id => document.getElementById(id);
@@ -22,10 +22,12 @@ const SIDE_DEAD = 0.12;           // tilt inside this counts as neither side
 const HOLD = 0.13;                // hit-stop on contact; a flick that lands in it still counts
 const SWING_EARLY = 0.55;         // a flick this long before contact still drives
 const LATE_UPGRADE = 0.22;        // a flick this soon after a block still upgrades it
+const GRACE = 0.2;                // a paddle that reaches the right side this soon after contact still hits
+// speed scales flight times (bigger = slower); centre = what a paddle held in the middle does.
 const LV = [
-  { speed: 1.0, err: 0.15, npcSpeed: 2.2, cue: true },
-  { speed: 0.82, err: 0.09, npcSpeed: 2.9, cue: false },
-  { speed: 0.68, err: 0.05, npcSpeed: 3.6, cue: false },
+  { speed: 1.3, err: 0.22, npcSpeed: 2.2, cue: true, centre: 'block' },
+  { speed: 1.05, err: 0.13, npcSpeed: 2.9, cue: false, centre: 'miss' },
+  { speed: 0.85, err: 0.07, npcSpeed: 3.6, cue: false, centre: 'miss' },
 ];
 
 const world = createPongWorld($('game'));
@@ -41,7 +43,7 @@ const game = {
   swingAnim: 0, swingDir: 1, yaw: 0,
   sideStreak: 0, lastSide: 0,
 };
-const ball = { pos: new THREE.Vector3(0, -5, 0), vel: new THREE.Vector3(), mode: 'hidden', path: null, freeT: 0, stuckT: 0, contactAt: 0, hitSide: 1 };
+const ball = { pos: new THREE.Vector3(0, -5, 0), vel: new THREE.Vector3(), mode: 'hidden', path: null, freeT: 0, stuckT: 0, contactAt: 0, hitSide: 1, graceT: 0 };
 const npc = { x: 0, paddleX: 0.3, target: 0.3, swing: 0 };
 
 // ---------- SpacetimeDB ----------
@@ -240,7 +242,7 @@ const bounceY = TOP + BALL_R;
 /** The NPC's shot to one of the player's sides (or an error). */
 function npcShot(start, { serve = false, quality = 0, attacked = false } = {}) {
   const L = LV[P?.level ?? game.level];
-  const fast = serve ? 1.1 : Math.max(0.8, 1 - game.rally * 0.012) * (attacked ? 0.84 : 1);
+  const fast = serve ? 1.1 : Math.max(0.85, 1 - game.rally * 0.008) * (attacked ? 0.88 : 1);
   // Mostly alternate sides; on Easy never more than two in a row on one side.
   let side = Math.random() < 0.5 ? 1 : -1;
   if (game.sideStreak >= 2 || (game.lastSide && Math.random() < 0.55)) side = -game.lastSide || side;
@@ -338,24 +340,32 @@ function onSegEnd(p, s) {
   }
 }
 
+const canHit = want => {
+  const have = sideOf(game.tilt);
+  return have === want || (have === 0 && LV[P?.level ?? game.level].centre === 'block');
+};
 function playerContact() {
-  const want = ball.pos.x >= 0 ? 1 : -1, have = sideOf(game.tilt);
+  const want = ball.pos.x >= 0 ? 1 : -1;
   ball.hitSide = want;
-  if (have !== want) {
-    // Missed: it flies on past the paddle.
-    const why = have === 0 ? 'Tilt left or right to hit!' : `That was your ${sideName(want)}!`;
-    game.why = have === 0 ? 'No paddle side' : `Wrong side: it was a ${sideName(want).toLowerCase()}`;
-    endPoint(false, game.why, 0.15, ['MISSED!', why]);
-    return;
-  }
-  ball.mode = 'stuck'; ball.stuckT = 0; ball.contactAt = elapsed;
+  ball.contactAt = elapsed;
+  if (canHit(want)) { ball.mode = 'stuck'; ball.stuckT = 0; return; }
+  // Not there yet: hold the ball a moment, since the phone's swing reaches us a little late.
+  segVel(ball.path.segs[ball.path.segs.length - 1], ball.path.segs[ball.path.segs.length - 1].T, ball.vel);
+  ball.mode = 'grace'; ball.graceT = 0;
+}
+function missed() {
+  const want = ball.hitSide, have = sideOf(game.tilt);
+  const why = have === 0 ? 'Swing left or right to hit!' : `That was your ${sideName(want)}!`;
+  game.why = have === 0 ? 'No paddle side' : `Wrong side: it was a ${sideName(want).toLowerCase()}`;
+  ball.mode = 'free'; ball.freeT = 0;
+  endPoint(false, game.why, 0.15, ['MISSED!', why]);
 }
 
 /** End of the hit-stop: drive if a flick came in around contact, block otherwise. */
 function resolveHit() {
   const dt = game.lastSwing - ball.contactAt;     // flicks arrive ~0.1 s after they happen
   let grade = 'BLOCK';
-  if (dt > -SWING_EARLY && dt <= HOLD + 0.01) grade = Math.abs(dt - 0.06) < 0.16 ? 'PERFECT' : 'GOOD';
+  if (dt > -SWING_EARLY && dt <= elapsed - ball.contactAt + 0.01) grade = Math.abs(dt - 0.06) < 0.2 ? 'PERFECT' : 'GOOD';
   playerReturn(grade, game.lastPower, ball.pos.clone());
 }
 
@@ -516,6 +526,10 @@ function stepBall(dt) {
       if (Math.abs(ball.vel.y) > 0.4) sfx.pock(Math.min(1, Math.abs(ball.vel.y) / 3) * 0.6, floorY < 0.1 ? 0.7 : 1);
     }
     if (ball.freeT > 2.5) ball.mode = 'hidden';
+  } else if (ball.mode === 'grace') {
+    ball.graceT += dt;
+    if (canHit(ball.hitSide)) { ball.mode = 'stuck'; ball.stuckT = 0; }
+    else if (ball.graceT >= GRACE) missed();
   } else if (ball.mode === 'stuck') {
     ball.stuckT += dt;
     if (ball.stuckT >= HOLD) resolveHit();
@@ -572,7 +586,7 @@ function update(dt) {
   npc.paddleX += clamp(npc.target - npc.paddleX, -step, step);
   npc.x += (npc.paddleX * 0.7 - npc.x) * Math.min(1, dt * 6);
   const nsw = Math.sin(npc.swing * Math.PI);
-  const g = world.npc.group;
+  const g = world.npc.group, S = g.scale.x;
   g.position.set(npc.x, Math.abs(Math.sin(elapsed * 5)) * 0.015, -HIT_Z - 0.45);
   g.rotation.y = clamp((npc.paddleX - npc.x) * 0.6, -0.4, 0.4);
   world.npc.head.rotation.y = clamp((ball.pos.x - npc.x) * 0.5, -0.5, 0.5);
@@ -580,14 +594,14 @@ function update(dt) {
   np.position.set(npc.paddleX, 0.9 + nsw * 0.06, -HIT_Z - 0.03 + nsw * 0.14);
   np.rotation.set(0.25 + nsw * 0.4, Math.PI + (npc.paddleX < npc.x ? 0.3 : -0.3), (npc.paddleX - npc.x) * 0.8);
   // Arm from shoulder to paddle handle
-  const sh = tmp.set(npc.x + (npc.paddleX >= npc.x ? 0.22 : -0.22), 1.3, -HIT_Z - 0.42);
+  const sh = tmp.set(npc.x + (npc.paddleX >= npc.x ? 0.22 : -0.22) * S, 1.3 * S, -HIT_Z - 0.42);
   const hand = V(npc.paddleX, 0.9 + nsw * 0.06, -HIT_Z - 0.06);
   dir.subVectors(hand, sh);
   const arm = world.npc.arm;
   arm.position.copy(sh).addScaledVector(dir, 0.5).sub(g.position);
-  arm.position.applyAxisAngle(up, -g.rotation.y);
+  arm.position.applyAxisAngle(up, -g.rotation.y).divideScalar(S);
   arm.quaternion.setFromUnitVectors(up, dir.clone().applyAxisAngle(up, -g.rotation.y).normalize());
-  arm.scale.y = clamp(dir.length() / 0.46, 0.6, 1.6);
+  arm.scale.y = clamp(dir.length() / S / 0.46, 0.6, 2);
 
   world.setBall(ball.pos, ball.mode !== 'hidden', ball.mode === 'path' || ball.mode === 'free');
 

@@ -148,14 +148,15 @@ which is where strikes and splits come from.
 The **🏓 Ping Pong** card opens `pingpong.html`: a game to 11 against an NPC (Easy, Medium or Hard).
 The phone is the paddle, paired with the same QR flow:
 
-- Hold the phone like a paddle handle, screen up. **Tilt right for a forehand, left for a backhand.**
-  If the paddle is on the side the ball comes to, it hits. The wrong side, or no side, misses.
+- Hold the phone like a paddle: **edge up**, screen facing sideways, top pointing at the laptop.
+  **Swing it to the right for a forehand, to the left for a backhand** (the phone reads where its top
+  points). If the paddle is on the side the ball comes to, it hits; the wrong side misses. A paddle
+  that gets there up to 0.2 s late still hits, and on Easy a paddle held in the middle blocks.
 - **Flick** as the ball arrives to turn the block into a drive. A well-timed flick is graded PERFECT, hits
   harder and goes away from the NPC. Without a flick you just block it back, and the NPC may smash it.
 - The bounce marker on your side is red for a forehand and blue for a backhand. On Easy, the matching
   side of the HUD meter also pulses.
-- Tilting doesn't count as a flick (rotation around the phone's long axis is ignored for swings), and the
-  side is read while the phone is held still, so a flick can't change it.
+- The side is read while the phone is held still, so the flick itself can't change it.
 - No sensors? In tap mode, tap the left half of the pad for a backhand and the right half for a forehand.
 
 | Piece | SpacetimeDB | How |

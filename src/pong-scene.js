@@ -162,7 +162,7 @@ function makeNpc() {
   }
   const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.36, 4, 10), jersey); arm.castShadow = true; g.add(arm);
   const off = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.3, 4, 10), jersey); off.position.set(-0.24, 1.1, 0.05); off.rotation.z = -0.4; g.add(off);
-  g.rotation.y = 0;   // faces +z (towards the player)
+  g.scale.setScalar(0.8);   // shorter, so the far end of the table stays in view; faces +z (the player)
   return { group: g, head, arm, body };
 }
 
