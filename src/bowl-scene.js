@@ -5,6 +5,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { drawSpacetimeWordmark, drawOrbits, drawCalHacks, onBrandReady } from './brand.js';
 import { LANE_HALF, GUTTER_X, KICKBACK_X, BALL_R, HEAD_Z, PIT_Z, PIN_SPOTS } from './bowl-physics.js';
 
 // Neon bowling alley: glossy maple lanes with arrows and dots, chunky cartoon pins, a swirled ball,
@@ -96,9 +97,11 @@ function approachTexture() {
   }));
 }
 
-// Masking unit panel above the pins: neon logo and lane number.
+// Masking unit panel above the pins: neon logo and lane number. Your lane (7) says RALLY;
+// the neighbours carry the sponsors, SpacetimeDB on even lanes and Cal Hacks on the other odd ones.
 function maskTexture(n, color) {
-  return tex(canvas(1024, 300, (ctx, w, h) => {
+  const sponsor = n === 7 ? '' : n % 2 === 0 ? 'stdb' : 'calhacks';
+  const paint = (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#171a3a'); g.addColorStop(1, '#0b0c20');
     ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
     for (let i = 0; i < 60; i++) { ctx.fillStyle = `rgba(255,255,255,${0.15 + rnd() * 0.5})`; ctx.beginPath(); ctx.arc(rnd() * w, rnd() * h, rnd() * 2.2, 0, Math.PI * 2); ctx.fill(); }
@@ -107,12 +110,17 @@ function maskTexture(n, color) {
     ctx.shadowBlur = 0;
     ctx.font = 'italic 900 112px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round'; ctx.lineWidth = 16; ctx.strokeStyle = '#1c2033';
-    ctx.strokeText('RALLY', w / 2 - 60, h / 2 + 6);
-    ctx.fillStyle = '#ffc61a'; ctx.fillText('RALLY', w / 2 - 60, h / 2 + 6);
-    ctx.font = 'italic 900 120px Nunito, system-ui, sans-serif';
+    if (sponsor === 'stdb') { drawOrbits(ctx, w / 2 - 70, h / 2, 330, 0.3); drawSpacetimeWordmark(ctx, w / 2 - 70, h / 2 + 4, 84); }
+    else if (sponsor === 'calhacks') drawCalHacks(ctx, w / 2 - 70, h / 2, 220);
+    else { ctx.strokeText('RALLY', w / 2 - 60, h / 2 + 6); ctx.fillStyle = '#ffc61a'; ctx.fillText('RALLY', w / 2 - 60, h / 2 + 6); }
+    ctx.font = 'italic 900 120px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round'; ctx.strokeStyle = '#1c2033';
     ctx.lineWidth = 14; ctx.strokeText(String(n), w - 110, h / 2 + 6);
     ctx.fillStyle = hex(color); ctx.fillText(String(n), w - 110, h / 2 + 6);
-  }));
+  };
+  const c = canvas(1024, 300, paint), t = tex(c);
+  if (sponsor === 'calhacks') onBrandReady(() => { paint(c.getContext('2d'), c.width, c.height); t.needsUpdate = true; });
+  return t;
 }
 
 // ---------- pins: a lathed white pin with two red neck stripes (vertex colours) ----------

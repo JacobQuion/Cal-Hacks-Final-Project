@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { makeConfetti } from './bowl-scene.js';
+import { drawSpacetimeWordmark, drawOrbits, drawCalHacks, onBrandReady } from './brand.js';
 
 // Table tennis arena: a blue tournament table under spotlights, red sports floor, sponsor barriers,
 // a crowd in the stands, a cartoon NPC across the net and the player's paddle in the foreground.
@@ -73,16 +74,22 @@ function floorTexture() {
     for (let i = 0; i < 9000; i++) { ctx.fillStyle = `rgba(${rnd() > 0.5 ? '255,255,255' : '0,0,0'},${rnd() * 0.05})`; ctx.fillRect(rnd() * w, rnd() * h, 2, 2); }
   }));
 }
+// text 'SPACETIMEDB' / 'CALHACKS' draws that sponsor's logo instead of lettering.
 function barrierTexture(color, text) {
-  return tex(canvas(1024, 128, (ctx, w, h) => {
+  const paint = (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#1b1f45'); g.addColorStop(1, '#0d1030');
     ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = color; ctx.fillRect(0, h - 14, w, 14);
+    if (text === 'SPACETIMEDB') { drawOrbits(ctx, w / 2, h / 2 - 7, 260, 0.3); drawSpacetimeWordmark(ctx, w / 2, h / 2 - 7, 62); return; }
+    if (text === 'CALHACKS') { drawCalHacks(ctx, w / 2, h / 2 - 7, 100); return; }
     ctx.font = 'italic 900 70px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round'; ctx.lineWidth = 10; ctx.strokeStyle = '#05060d';
     ctx.strokeText(text, w / 2, h / 2 - 4);
     ctx.fillStyle = color; ctx.fillText(text, w / 2, h / 2 - 4);
-  }));
+  };
+  const c = canvas(1024, 128, paint), t = tex(c);
+  if (text === 'CALHACKS') onBrandReady(() => { paint(c.getContext('2d'), c.width, c.height); t.needsUpdate = true; });
+  return t;
 }
 
 // ---------- the table ----------
@@ -291,7 +298,7 @@ export function createPongWorld(canvasEl) {
   outer.rotation.x = -Math.PI / 2; outer.position.y = -0.002; scene.add(outer);
 
   // Sponsor barriers around the court
-  const words = [['RALLY', '#ffc61a'], ['PING PONG', '#1f8bff'], ['SPACETIMEDB', '#35c9a5'], ['RALLY', '#ff4f8b']];
+  const words = [['RALLY', '#ffc61a'], ['SPACETIMEDB', '#8a6bff'], ['PING PONG', '#1f8bff'], ['CALHACKS', '#508ba2'], ['RALLY', '#ff4f8b']];
   const bars = [];
   for (let i = 0; i < 4; i++) bars.push({ x: -3.5 + 1.4 * i + 0.7, z: -6, ry: 0 });
   for (const s of [-1, 1]) for (let i = 0; i < 8; i++) bars.push({ x: s * 3.5, z: -6 + 1.4 * i + 0.7, ry: -s * Math.PI / 2 });

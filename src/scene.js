@@ -7,6 +7,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { HALF_L, HALF_W, HALF_W_DOUBLES, SHORT_LINE, NET_H } from './physics.js';
+import { drawSpacetimeWordmark, drawOrbits, drawCalHacks, onBrandReady } from './brand.js';
 
 // Broadcast-style indoor arena: PBR court and floors, a real net, detailed athletes with secondary
 // animation (knees, balance arm, head tracking the shuttle), a feathered shuttle, tiered stands with
@@ -236,6 +237,7 @@ function makeNet() {
 }
 
 // ---------- LED boards (scrolling), jumbotron ----------
+// A segment's text may instead be a function (ctx, centreX, H) that draws sponsor artwork.
 function ledCanvas(segments) {
   const W = 3072, H = 128;
   return canvas(W, H, (ctx) => {
@@ -244,6 +246,7 @@ function ledCanvas(segments) {
       const x = i * seg;
       const gr = ctx.createLinearGradient(x, 0, x + seg, 0); gr.addColorStop(0, bg1); gr.addColorStop(1, bg2);
       ctx.fillStyle = gr; ctx.fillRect(x, 0, seg, H);
+      if (typeof text === 'function') { text(ctx, x + seg / 2, H); return; }
       ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = style || '900 italic 76px "Arial Black", Arial, sans-serif';
       ctx.fillText(text, x + seg / 2, H / 2 + 4);
@@ -256,18 +259,20 @@ function ledCanvas(segments) {
 }
 function makeBoards() {
   const g = new THREE.Group();
-  const main = ledCanvas([
+  const segments = [
     ['#071a3d', '#0a3a8a', '#ffffff', 'RALLY BADMINTON'],
     ['#0b0b12', '#16161f', '#c6ff00', 'WORLD TOUR FINALS'],
-    ['#7a0a2c', '#e8304f', '#ffffff', '#RALLY'],
+    ['#07070d', '#1d1440', '', (ctx, cx, H) => { drawOrbits(ctx, cx, H / 2, 150, 0.35); drawSpacetimeWordmark(ctx, cx, H / 2, 58); }],
     ['#00121a', '#003a4d', '#00e5ff', 'SWING YOUR PHONE'],
     ['#151006', '#3a2a06', '#ffd23f', '1V1 • LIVE'],
-    ['#071a3d', '#0a3a8a', '#ffffff', 'SMASH • DROP • CLEAR'],
-  ]);
+    ['#0d1030', '#232a66', '', (ctx, cx, H) => drawCalHacks(ctx, cx, H / 2, 108)],
+  ];
+  const main = ledCanvas(segments);
   const party = ledCanvas(Array.from({ length: 6 }, (_, i) => (i % 2
     ? ['#ffb000', '#ff5a00', '#1a0d00', 'POINT!']
     : ['#1f0040', '#5a00b8', '#ffffff', 'WHAT A RALLY!'])));
   const mainTex = tex(main, { repeat: [1, 1] }), partyTex = tex(party, { repeat: [1, 1] });
+  onBrandReady(() => { main.getContext('2d').drawImage(ledCanvas(segments), 0, 0); mainTex.needsUpdate = true; });
   const ledMat = new THREE.MeshBasicMaterial({ map: mainTex, color: new THREE.Color(1.5, 1.5, 1.5) });
   const housing = phys(0x0c0d12, { roughness: 0.4, clearcoat: 0.5 });
   const H = 0.82;
@@ -334,11 +339,16 @@ function makeJumbotron() {
       const gr = ctx.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, '#00e5ff'); gr.addColorStop(1, '#ff2d6f');
       ctx.fillStyle = gr; ctx.fillText('LET’S PLAY', w / 2, 240);
     }
+    // Sponsors in the corners
+    drawCalHacks(ctx, 100, 52, 72);
+    ctx.globalAlpha = 0.85; drawSpacetimeWordmark(ctx, w - 128, 52, 26); ctx.globalAlpha = 1;
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     for (let y = 0; y < h; y += 3) ctx.fillRect(0, y, w, 1);
     t.needsUpdate = true;
   };
+  let last = null;
   draw(null);
+  onBrandReady(() => draw(last));
   const g = new THREE.Group();
   const frameMat = phys(0x0b0c10, { roughness: 0.4, metalness: 0.4 });
   const screenMat = new THREE.MeshBasicMaterial({ map: t, color: new THREE.Color(1.15, 1.15, 1.15) });
@@ -354,7 +364,7 @@ function makeJumbotron() {
     group: g,
     set(s) {
       const k = s ? `${s.left}|${s.right}|${s.a}|${s.b}|${s.serving}` : '';
-      if (k !== key) { key = k; draw(s); }
+      if (k !== key) { key = k; last = s; draw(s); }
     },
   };
 }
