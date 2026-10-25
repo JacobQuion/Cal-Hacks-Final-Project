@@ -423,7 +423,7 @@ body.arena .end-btns .small-btn.primary { background: linear-gradient(180deg, #f
 .video-panel.min { width: auto; }
 .video-panel.min .vtile, .video-panel.min .vlive { display: none; }
 /* Keep menus and overlays clear of the panel while a call is up. */
-body.with-video .screen:not(#lobby):not(#pause) { padding-right: calc(var(--video-w) + 40px); }
+body.with-video .screen:not(#lobby) { padding-right: calc(var(--video-w) + 40px); }
 /* Docked in the lobby: a third card in the row, as tall as its neighbours. */
 .video-panel.docked {
   position: static; transform: none; align-self: stretch; width: clamp(220px, 20vw, 300px);
@@ -626,9 +626,10 @@ button.mode-note:hover { color: var(--ink); }
 }
 
 /* ---------- Bowling (bowling.html) and its homepage card ---------- */
-.bowl-mode { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 16px; }
-.bowl-mode .mode-head { flex: 1; min-width: 0; }
-.bowl-mode .big-btn { margin-top: 0; width: auto; flex: none; padding: 14px 22px; text-decoration: none; }
+/* Bowling and ping pong cards: side by side under the badminton modes, compact */
+.game-mode { gap: 12px; padding: 14px 18px; }
+.game-mode .mode-head h3 { white-space: nowrap; }
+.game-mode .big-btn { padding: 12px 16px; }
 .mode-icon.blue { background: #dcecff; box-shadow: inset 0 0 0 2px #a9cdff; }
 .new-tag {
   display: inline-block; vertical-align: 3px; margin-left: 6px; padding: 2px 8px; border-radius: 999px;
@@ -764,12 +765,9 @@ body.bowl .end-card .end-side b { color: #fff; text-shadow: 0 0 40px rgba(31, 13
   .scorecard { transform: translateX(-50%) scale(.56); top: 70px; }
   .bowl-panel { bottom: 88px; }
   .pin-map { bottom: 150px; transform: scale(.8); transform-origin: right bottom; }
-  .bowl-mode { flex-direction: column; align-items: stretch; }
-  .bowl-mode .big-btn { width: 100%; }
 }
 
 /* ---------- Ping pong (pingpong.html) and its homepage card ---------- */
-.mode-icon.mint { background: #d9f7ee; box-shadow: inset 0 0 0 2px #9be6cf; }
 body.arena .big-btn.mint { background: var(--mint); color: #fff; box-shadow: 0 5px 0 #1f9478; }
 body.pong .logo-bottom { color: var(--mint); }
 body.pong .side-card .seg { display: grid; grid-template-columns: repeat(3, 1fr); }
