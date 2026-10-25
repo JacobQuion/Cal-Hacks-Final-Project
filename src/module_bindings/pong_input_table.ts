@@ -16,4 +16,5 @@ export default __t.row({
   tilt: __t.f32(),
   power: __t.f32(),
   tap: __t.bool(),
+  seat: __t.u8(),
 });
