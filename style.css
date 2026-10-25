@@ -590,8 +590,6 @@ body.arena #menu .logo-shuttle { font-size: 40px; right: -34px; top: -10px; }
 .game-icon { font-size: 36px; line-height: 1.1; }
 .game-btn b { font-size: 19px; font-weight: 900; white-space: nowrap; }
 .game-sub { font-size: 12px; font-weight: 800; color: rgba(28, 32, 51, .65); white-space: nowrap; }
-.play-card.doubles .game-btn { background: var(--red); color: #fff; box-shadow: 0 5px 0 var(--red-deep); }
-.play-card.doubles .game-sub { color: rgba(255, 255, 255, .85); }
 .play-card .join-row input { padding: 10px; font-size: 16px; }
 /* Lobby: says loud and clear whether this is solo or doubles. */
 .mode-banner {
