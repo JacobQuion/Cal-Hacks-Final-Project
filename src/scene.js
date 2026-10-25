@@ -159,7 +159,7 @@ function makeFloors() {
     ctx.font = '900 italic 64px "Arial Black", Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(255,255,255,0.78)';
     for (const [y, rot] of [[h * 0.055, 0], [h * 0.945, 0]]) { // both read correctly from the broadcast (near) side
-      ctx.save(); ctx.translate(w / 2, y); ctx.rotate(rot); ctx.fillText('RACKET RUSH', 0, 0); ctx.restore();
+      ctx.save(); ctx.translate(w / 2, y); ctx.rotate(rot); ctx.fillText('RALLY', 0, 0); ctx.restore();
     }
   });
   const fopMat = phys(0xffffff, { map: tex(fop), normalMap: fineN, normalScale: new THREE.Vector2(0.25, 0.25), roughness: 0.38, clearcoat: 0.6, clearcoatRoughness: 0.18, envMapIntensity: 0.9 });
@@ -257,9 +257,9 @@ function ledCanvas(segments) {
 function makeBoards() {
   const g = new THREE.Group();
   const main = ledCanvas([
-    ['#071a3d', '#0a3a8a', '#ffffff', 'RACKET RUSH'],
+    ['#071a3d', '#0a3a8a', '#ffffff', 'RALLY BADMINTON'],
     ['#0b0b12', '#16161f', '#c6ff00', 'WORLD TOUR FINALS'],
-    ['#7a0a2c', '#e8304f', '#ffffff', '#RACKETRUSH'],
+    ['#7a0a2c', '#e8304f', '#ffffff', '#RALLY'],
     ['#00121a', '#003a4d', '#00e5ff', 'SWING YOUR PHONE'],
     ['#151006', '#3a2a06', '#ffd23f', '1V1 • LIVE'],
     ['#071a3d', '#0a3a8a', '#ffffff', 'SMASH • DROP • CLEAR'],
@@ -315,7 +315,7 @@ function makeJumbotron() {
     ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '900 italic 54px "Arial Black", Arial, sans-serif';
-    ctx.fillStyle = '#ffd23f'; ctx.fillText('RACKET RUSH', w / 2, 52);
+    ctx.fillStyle = '#ffd23f'; ctx.fillText('RALLY', w / 2, 52);
     ctx.font = '700 22px Arial, sans-serif'; ctx.fillStyle = '#8fb4ff'; ctx.fillText('WORLD TOUR FINALS', w / 2, 92);
     if (s) {
       const row = (y, name, score, col, serving) => {

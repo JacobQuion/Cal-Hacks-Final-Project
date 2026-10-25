@@ -150,7 +150,7 @@ body.phone { background: radial-gradient(ellipse at 50% 0%, #1b1440 0%, #0a0b1c 
   position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); gap: 16px;
 }
-.phone-wrap .logo { transform: rotate(-4deg) scale(.6); margin: -26px 0 -30px; }
+.phone-wrap .logo { transform: rotate(-4deg) scale(.6); margin: -16px 0 -4px; }
 .step { width: min(420px, 100%); display: flex; flex-direction: column; gap: 14px; text-align: center; }
 .step h2 { font-size: 26px; }
 .step p { color: var(--muted); font-weight: 500; font-size: 17px; line-height: 1.35; }
@@ -637,6 +637,11 @@ button.mode-note:hover { color: var(--ink); }
 body.arena .big-btn.blue { background: var(--blue); color: #fff; box-shadow: 0 5px 0 var(--blue-deep); }
 a.big-btn, a.small-btn { text-decoration: none; text-align: center; }
 
+/* Badminton lobby: RALLY / BADMINTON over the pairing cards */
+body.arena:not(.bowl) #lobby { gap: 26px; justify-content: safe center; overflow-y: auto; }
+body.arena #lobby .logo-top { font-size: clamp(30px, 4.4vw, 56px); }
+body.arena #lobby .logo-bottom { font-size: clamp(50px, 7.6vw, 100px); }
+body.arena #lobby .logo-shuttle { font-size: 44px; right: -42px; top: -6px; }
 body.bowl #lobby { gap: 26px; justify-content: safe center; overflow-y: auto; background: radial-gradient(ellipse at center, rgba(5, 6, 13, .1) 20%, rgba(5, 6, 13, .72) 100%); }
 body.bowl .logo-top { font-size: clamp(30px, 4.4vw, 56px); }
 body.bowl .logo-bottom { font-size: clamp(50px, 7.6vw, 100px); color: var(--blue); }

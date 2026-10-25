@@ -1,6 +1,7 @@
-# Racket Rush
+# Rally
 
-Badminton on your laptop, swung with your phone. Play **1v1 across two laptops** (each player with
+Three games on your laptop, played with your phone: **Rally Badminton**, **Rally Bowling** and
+**Rally Ping Pong**. In badminton, play **1v1 across two laptops** (each player with
 their own phone as a racket) or **against the NPC**. SpacetimeDB is the referee: laptops and phones
 are thin clients, and every shot, landing, point, secret move and NPC decision happens inside the
 database.

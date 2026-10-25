@@ -1,4 +1,4 @@
-// RACKET RUSH — phone-swung badminton where SpacetimeDB is the referee.
+// RALLY — phone-swung badminton where SpacetimeDB is the referee.
 // Laptops and phones are just clients: reducers decide every shot (server-side physics from core.ts),
 // one-shot schedule tables resolve landings and drive the AI, lifecycle reducers pause a match when a
 // device drops, and event tables carry swings, hits and rally results without storing them.

@@ -107,8 +107,8 @@ function maskTexture(n, color) {
     ctx.shadowBlur = 0;
     ctx.font = 'italic 900 112px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round'; ctx.lineWidth = 16; ctx.strokeStyle = '#1c2033';
-    ctx.strokeText('RACKET RUSH', w / 2 - 60, h / 2 + 6);
-    ctx.fillStyle = '#ffc61a'; ctx.fillText('RACKET RUSH', w / 2 - 60, h / 2 + 6);
+    ctx.strokeText('RALLY', w / 2 - 60, h / 2 + 6);
+    ctx.fillStyle = '#ffc61a'; ctx.fillText('RALLY', w / 2 - 60, h / 2 + 6);
     ctx.font = 'italic 900 120px Nunito, system-ui, sans-serif';
     ctx.lineWidth = 14; ctx.strokeText(String(n), w - 110, h / 2 + 6);
     ctx.fillStyle = hex(color); ctx.fillText(String(n), w - 110, h / 2 + 6);

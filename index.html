@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Racket Rush</title>
+  <title>Rally</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,600;0,700;0,800;0,900;1,900&display=swap" rel="stylesheet" />
@@ -15,8 +15,7 @@
   <!-- Title: choose how to play -->
   <section id="menu" class="screen show">
     <div class="logo">
-      <span class="logo-top">RACKET</span>
-      <span class="logo-bottom">RUSH</span>
+      <span class="logo-bottom">RALLY</span>
       <span class="logo-shuttle">🏸</span>
     </div>
     <div class="menu-grid">
@@ -26,7 +25,7 @@
           <div class="mode">
             <div class="mode-head">
               <span class="mode-icon">🎯</span>
-              <div><h3>Solo</h3><p>Rally against an NPC</p></div>
+              <div><h3>Badminton Solo</h3><p>Play against an NPC</p></div>
             </div>
             <div class="seg mode-body" id="levelSeg" role="radiogroup" aria-label="NPC difficulty">
               <button data-level="0" class="on">Easy</button>
@@ -38,7 +37,7 @@
           <div class="mode">
             <div class="mode-head">
               <span class="mode-icon red">⚔️</span>
-              <div><h3>Versus</h3><p>Take on a friend</p></div>
+              <div><h3>Badminton Versus</h3><p>Take on a friend</p></div>
             </div>
             <button class="mode-note mode-body" id="btnShare">🔗 Copy a link to share</button>
             <button class="big-btn pink" id="btnCreate">Create Match</button>
@@ -75,6 +74,11 @@
 
   <!-- Lobby: pair phone, wait for opponent, ready up -->
   <section id="lobby" class="screen">
+    <div class="logo">
+      <span class="logo-top">RALLY</span>
+      <span class="logo-bottom">BADMINTON</span>
+      <span class="logo-shuttle">🏸</span>
+    </div>
     <div class="menu-row">
       <div class="card pair-card">
         <div class="qr" id="qr"><span class="hint">Loading…</span></div>

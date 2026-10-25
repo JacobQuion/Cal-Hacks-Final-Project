@@ -1,4 +1,4 @@
-# Racket Rush — Badminton on your laptop, swung with your phone
+# Rally — Badminton on your laptop, swung with your phone
 
 The laptop (or TV) shows the game. Your phone is the racket: scan a QR code, calibrate in 20 seconds,
 then swing your phone like a racket. No camera / CV — the phone's motion sensors (gyroscope +

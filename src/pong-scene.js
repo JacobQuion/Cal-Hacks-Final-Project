@@ -291,7 +291,7 @@ export function createPongWorld(canvasEl) {
   outer.rotation.x = -Math.PI / 2; outer.position.y = -0.002; scene.add(outer);
 
   // Sponsor barriers around the court
-  const words = [['RACKET RUSH', '#ffc61a'], ['PING PONG', '#1f8bff'], ['SPACETIMEDB', '#35c9a5'], ['RACKET RUSH', '#ff4f8b']];
+  const words = [['RALLY', '#ffc61a'], ['PING PONG', '#1f8bff'], ['SPACETIMEDB', '#35c9a5'], ['RALLY', '#ff4f8b']];
   const bars = [];
   for (let i = 0; i < 4; i++) bars.push({ x: -3.5 + 1.4 * i + 0.7, z: -6, ry: 0 });
   for (const s of [-1, 1]) for (let i = 0; i < 8; i++) bars.push({ x: s * 3.5, z: -6 + 1.4 * i + 0.7, ry: -s * Math.PI / 2 });
