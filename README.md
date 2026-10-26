@@ -1,4 +1,4 @@
-# Swing 🏸
+# Rally 🏸
 
 <a href="https://youtu.be/czPDelomrt4"><img src="https://img.youtube.com/vi/czPDelomrt4/maxresdefault.jpg" alt="Watch the Rally demo" width="100%"></a>
 
